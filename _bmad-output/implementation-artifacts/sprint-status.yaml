@@ -52,8 +52,8 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2 — 아는 와인 입고 (Scan-to-Receive)
-  epic-2: backlog
-  2-1-와인-마스터-스키마-시드: backlog
+  epic-2: in-progress
+  2-1-와인-마스터-스키마-시드: review
   2-2-바코드-스캔: backlog
   2-3-라벨-사진-촬영-저장: backlog
   2-4-매칭-확인-카드: backlog

@@ -5,5 +5,18 @@
   user (Story 1.2) · wine_product/wine_vintage/barcode (Story 2.1) · receiving_record (Story 2.6)
 """
 from app.models.user import User, UserRole
+from app.models.wine import (
+    Barcode,
+    BarcodeWineProductLink,
+    WineProduct,
+    WineVintage,
+)
 
-__all__ = ["User", "UserRole"]
+__all__ = [
+    "User",
+    "UserRole",
+    "WineProduct",
+    "WineVintage",
+    "Barcode",
+    "BarcodeWineProductLink",
+]
