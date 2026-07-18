@@ -8,16 +8,16 @@ void main() {
   runApp(const ProviderScope(child: WineerpApp()));
 }
 
-class WineerpApp extends StatelessWidget {
+class WineerpApp extends ConsumerWidget {
   const WineerpApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp.router(
       title: 'wineerp',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light,
-      routerConfig: appRouter,
+      routerConfig: ref.watch(routerProvider),
     );
   }
 }

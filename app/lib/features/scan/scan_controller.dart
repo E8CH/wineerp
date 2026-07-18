@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../data/scan_models.dart';
+
 /// 스캔 상태 — 마지막 인식 바코드. Story 2.4 매칭이 `lastCode`를 소비.
 class ScanState {
   const ScanState({this.lastCode});
@@ -33,4 +35,8 @@ final scanControllerProvider =
 
 /// 카메라 사용 여부. 위젯 테스트에서 false로 override해 플랫폼 카메라를 우회한다.
 final cameraEnabledProvider = Provider<bool>((ref) => true);
+
+/// 스캔 매칭 결과(비동기). 인식 코드로 /scan 호출 결과를 보관.
+final matchProvider =
+    StateProvider<AsyncValue<ScanResult?>>((ref) => const AsyncData(null));
 
