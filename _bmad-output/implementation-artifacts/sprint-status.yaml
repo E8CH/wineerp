@@ -48,7 +48,7 @@ development_status:
   1-2-사용자-데이터-기반: review
   1-3-직원-가입-로그인: review
   1-4-관리자-가입-로그인-역할-분기: review
-  1-5-m3-네이비-앱-셸-접근성-기반: backlog
+  1-5-m3-네이비-앱-셸-접근성-기반: review
   epic-1-retrospective: optional
 
   # Epic 2 — 아는 와인 입고 (Scan-to-Receive)

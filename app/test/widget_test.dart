@@ -1,30 +1,31 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-
 import 'package:wineerp_app/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('앱 셸이 4탭으로 뜨고 홈은 스캔', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: WineerpApp()));
+    await tester.pumpAndSettle();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+    // 하단 4탭 라벨 존재
+    expect(find.text('내역'), findsOneWidget);
+    expect(find.text('리포트'), findsOneWidget);
+    expect(find.text('재고'), findsOneWidget);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    // 홈 = 스캔 화면 (스캔은 AppBar 제목 + 탭 라벨로 2회 등장)
+    expect(find.text('스캔'), findsWidgets);
+    expect(find.byIcon(Icons.qr_code_scanner), findsWidgets);
+  });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+  testWidgets('탭 전환: 재고로 이동', (tester) async {
+    await tester.pumpWidget(const ProviderScope(child: WineerpApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('재고'));
+    await tester.pumpAndSettle();
+
+    // 재고 화면의 안내 문구 표시
+    expect(find.textContaining('재고가 여기에'), findsOneWidget);
   });
 }
