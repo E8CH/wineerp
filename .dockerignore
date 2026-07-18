@@ -1,0 +1,18 @@
+# Railway/Docker 빌드 컨텍스트 최소화 (루트 Dockerfile은 backend/ 만 사용)
+.git
+.claude
+_bmad
+_bmad-output
+docs
+app
+scripts
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+.env
+**/.env
+openapi.json
+openapitools.json
