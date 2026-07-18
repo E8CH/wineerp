@@ -8,15 +8,18 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session
 
+from app.adapters.storage import get_storage
 from app.core.config import settings
 from app.core.db import get_session
 from app.core.security import decode_token
 from app.models.user import User, UserRole
+from app.services.ports import StoragePort
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/login")
 
 SessionDep = Annotated[Session, Depends(get_session)]
 TokenDep = Annotated[str, Depends(oauth2_scheme)]
+StorageDep = Annotated[StoragePort, Depends(get_storage)]
 
 _CREDENTIALS_EXC = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,

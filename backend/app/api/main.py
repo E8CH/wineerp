@@ -3,11 +3,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.routes import auth, health
+from app.api.routes import auth, health, images
 
 api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
+api_router.include_router(images.router)
 
 # 후속 스토리 등록 예정:
-#   scan (2.x) · wines (3.x) · receiving (2.6/4.x) · reports (5.x)
+#   scan (2.4) · wines (3.x) · receiving (2.6/4.x) · reports (5.x)

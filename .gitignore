@@ -37,6 +37,9 @@ openapi.json
 openapitools.json
 app/lib/data/api/.dart_tool/
 
+# ---- 로컬 이미지 스토리지(dev 폴백) ----
+backend/_local_storage/
+
 # ---- OS / editor ----
 .DS_Store
 Thumbs.db
