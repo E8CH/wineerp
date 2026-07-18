@@ -1,0 +1,46 @@
+# ---- Secrets (NEVER commit) ----
+.env
+*.env
+!.env.example
+**/.env
+backend/.env
+app/.env
+
+# ---- Python / backend ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.uv/
+uv.lock.bak
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# ---- Flutter / app ----
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.idea/
+app/ios/Pods/
+app/android/.gradle/
+app/android/local.properties
+app/**/GeneratedPluginRegistrant.*
+*.iml
+
+# ---- 생성 산출물 ----
+openapi.json
+app/lib/data/api/.dart_tool/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ---- BMad runtime memory sidecar (keep planning artifacts) ----
+_bmad/_memory/

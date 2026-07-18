@@ -1,0 +1,32 @@
+# 로컬 개발용(선택) — db + backend. docker 설치 시 `docker compose up`.
+# docker 미설치 환경에서는 backend/README.md의 uv 로컬 실행 절차를 사용.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: wineerp
+      POSTGRES_PASSWORD: wineerp
+      POSTGRES_DB: wineerp
+    ports:
+      - "5432:5432"
+    volumes:
+      - wineerp_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wineerp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://wineerp:wineerp@db:5432/wineerp
+      PORT: "8000"
+    ports:
+      - "8000:8000"
+
+volumes:
+  wineerp_pgdata:

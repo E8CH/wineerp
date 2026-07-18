@@ -1,0 +1,1 @@
+# OpenAPI 생성 Dart 클라이언트 + 모델(camelCase, @JsonKey). scripts/gen_client 로 생성.
