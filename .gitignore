@@ -34,6 +34,7 @@ app/**/GeneratedPluginRegistrant.*
 
 # ---- 생성 산출물 ----
 openapi.json
+openapitools.json
 app/lib/data/api/.dart_tool/
 
 # ---- OS / editor ----
