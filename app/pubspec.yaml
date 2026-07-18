@@ -40,7 +40,7 @@ dependencies:
   go_router: ^14.6.2         # 라우팅 (결정 4-C)
   dio: ^5.7.0                # HTTP / API 클라이언트 기반
   json_annotation: ^4.9.0    # 모델 직렬화 (snake↔camel 매핑)
-  # mobile_scanner: Story 2.2 에서 추가 (안드로이드/iOS 네이티브 설정 포함)
+  mobile_scanner: ^7.0.0     # 바코드 스캔 (ML Kit/CameraX·AVFoundation) — Story 2.2
   # image:          Story 2.3 에서 추가 (촬영 후 압축·EXIF 제거)
 
 dev_dependencies:
