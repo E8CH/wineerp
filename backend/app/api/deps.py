@@ -11,7 +11,7 @@ from sqlmodel import Session
 from app.core.config import settings
 from app.core.db import get_session
 from app.core.security import decode_token
-from app.models.user import User
+from app.models.user import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/login")
 
@@ -40,3 +40,16 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_manager(current_user: CurrentUser) -> User:
+    """manager 전용 리소스 가드. staff면 403(권한 부족)."""
+    if current_user.role != UserRole.manager:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="관리자 권한이 필요합니다.",
+        )
+    return current_user
+
+
+CurrentManager = Annotated[User, Depends(require_manager)]

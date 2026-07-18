@@ -6,9 +6,10 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentManager, CurrentUser, SessionDep
 from app.core.security import create_access_token, verify_password
 from app.crud import user as user_crud
+from app.models.user import UserRole
 from app.schemas.user import Token, UserCreate, UserRead
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -44,3 +45,20 @@ def login(
 @router.get("/me", response_model=UserRead)
 def read_me(current_user: CurrentUser) -> UserRead:
     return UserRead.model_validate(current_user)
+
+
+@router.post("/managers", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+def create_manager(
+    payload: UserCreate,
+    session: SessionDep,
+    _: CurrentManager,  # manager만 호출 가능 (staff → 403)
+) -> UserRead:
+    if user_crud.get_user_by_email(session, payload.email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="이미 가입된 이메일입니다.",
+        )
+    user = user_crud.create_user(
+        session, email=payload.email, password=payload.password, role=UserRole.manager
+    )
+    return UserRead.model_validate(user)
