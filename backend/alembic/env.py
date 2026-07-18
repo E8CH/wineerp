@@ -10,11 +10,10 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
+# 모델 등록 — import 시 SQLModel.metadata에 테이블이 등록되어 autogenerate가 인식.
+import app.models  # noqa: E402,F401
 from alembic import context
 from app.core.config import settings
-
-# 모델 등록 지점 (스토리별로 import 추가):
-# from app.models import user  # noqa: F401  (Story 1.2)
 
 config = context.config
 if config.config_file_name is not None:
