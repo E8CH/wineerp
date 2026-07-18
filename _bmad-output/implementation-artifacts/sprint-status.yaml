@@ -56,7 +56,7 @@ development_status:
   2-1-와인-마스터-스키마-시드: review
   2-2-바코드-스캔: review
   2-3-라벨-사진-촬영-저장: review
-  2-4-매칭-확인-카드: backlog
+  2-4-매칭-확인-카드: review
   2-5-빈티지-후보-선택: backlog
   2-6-수량-지정-입고-완료: backlog
   epic-2-retrospective: optional
