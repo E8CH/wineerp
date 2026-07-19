@@ -14,6 +14,16 @@ from sqlmodel import Session, select
 from app.models.receiving import ReceivingRecord
 
 
+def find_by_idempotency_key(
+    session: Session, key: uuid.UUID
+) -> ReceivingRecord | None:
+    """이미 처리된 요청인지 확인. soft-delete된 것도 찾는다 —
+    취소된 입고를 재시도가 되살리면 안 되고, 그건 '새 입고'도 아니다."""
+    return session.exec(
+        select(ReceivingRecord).where(ReceivingRecord.idempotency_key == key)
+    ).first()
+
+
 def create_record(
     session: Session,
     *,
@@ -21,6 +31,7 @@ def create_record(
     quantity: int,
     staff_id: uuid.UUID,
     memo: str | None = None,
+    idempotency_key: uuid.UUID | None = None,
 ) -> ReceivingRecord:
     """입고 1건 생성. `received_at`은 모델 기본값(서버 UTC)이 채운다 — 인자로 받지 않는다."""
     record = ReceivingRecord(
@@ -28,6 +39,7 @@ def create_record(
         quantity=quantity,
         staff_id=staff_id,
         memo=memo,
+        idempotency_key=idempotency_key,
     )
     session.add(record)
     session.commit()

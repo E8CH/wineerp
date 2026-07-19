@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/uuid.dart';
 import '../../data/receiving_repository.dart';
 import '../scan/scan_controller.dart';
 
@@ -13,6 +14,7 @@ enum ReceivingPhase { idle, submitting, error }
 
 class ReceivingState {
   const ReceivingState({
+    required this.idempotencyKey,
     this.quantity = 1,
     this.phase = ReceivingPhase.idle,
     this.error,
@@ -21,6 +23,10 @@ class ReceivingState {
   final int quantity;
   final ReceivingPhase phase;
   final String? error;
+
+  /// 이 '병'의 멱등 키. 재시도는 같은 키를 재사용해야 서버가 중복을 구분한다.
+  /// 입고가 성공하면 새 키가 발급된다 — 다음 병은 별개 입고다.
+  final String idempotencyKey;
 
   bool get isSubmitting => phase == ReceivingPhase.submitting;
 
@@ -31,6 +37,7 @@ class ReceivingState {
     bool clearError = false,
   }) =>
       ReceivingState(
+        idempotencyKey: idempotencyKey, // 재시도 간 절대 바뀌지 않는다
         quantity: quantity ?? this.quantity,
         phase: phase ?? this.phase,
         error: clearError ? null : (error ?? this.error),
@@ -39,7 +46,7 @@ class ReceivingState {
 
 class ReceivingController extends Notifier<ReceivingState> {
   @override
-  ReceivingState build() => const ReceivingState();
+  ReceivingState build() => ReceivingState(idempotencyKey: uuidV4());
 
   void setQuantity(int q) {
     if (state.isSubmitting) return;
@@ -57,13 +64,16 @@ class ReceivingController extends Notifier<ReceivingState> {
       await ref.read(receivingRepositoryProvider).create(
             wineVintageId: wineVintageId,
             quantity: state.quantity,
+            // ⚠️ state의 키를 그대로 보낸다. 여기서 새로 만들면 재시도마다 키가 달라져
+            // 서버가 중복을 구분하지 못하고 멱등성이 통째로 무력해진다.
+            idempotencyKey: state.idempotencyKey,
           );
       // ⚠️ 저장 성공 이후에는 무엇도 실패로 되돌릴 수 없다. 햅틱은 장식이므로
       // 임계 경로 밖에서 처리한다 — 진동이 안 되는 기기에서 리셋이 통째로
       // 건너뛰어지면 입고는 됐는데 다음 병을 못 찍는 상태가 된다.
       unawaited(HapticFeedback.mediumImpact().catchError((_) {}));
       _resetScanLoop();
-      state = const ReceivingState();
+      state = ReceivingState(idempotencyKey: uuidV4()); // 다음 병은 새 키
       return true;
     } on DioException catch (e) {
       state = state.copyWith(phase: ReceivingPhase.error, error: _message(e));

@@ -24,6 +24,8 @@ class ReceivingCreate(BaseModel):
     wine_vintage_id: uuid.UUID
     quantity: int = Field(ge=1, le=MAX_QUANTITY)  # 0병 입고는 입고가 아니다
     memo: str | None = Field(default=None, max_length=500)
+    # 병 단위로 클라이언트가 발급. 재시도는 같은 키를 재사용해 중복 입고를 막는다(2.7).
+    idempotency_key: uuid.UUID | None = None
 
 
 class ReceivingRead(BaseModel):

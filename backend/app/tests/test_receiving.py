@@ -165,6 +165,105 @@ def test_create_requires_auth(client):
     assert resp.status_code == 401
 
 
+def _create_with_key(client, token, vintage_id, key, quantity=1):
+    return client.post(
+        f"{API}/receiving",
+        json={
+            "wine_vintage_id": vintage_id,
+            "quantity": quantity,
+            "idempotency_key": key,
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+def test_same_idempotency_key_creates_only_one_record(client, session_factory):
+    """응답이 유실된 뒤의 재시도가 재고를 부풀리면 안 된다(Story 2.7)."""
+    import uuid as _uuid
+
+    token = _token(client)
+    vid = _a_vintage_id(client, token)
+    key = str(_uuid.uuid4())
+
+    first = _create_with_key(client, token, vid, key, quantity=5)
+    second = _create_with_key(client, token, vid, key, quantity=5)
+
+    assert first.status_code == 201
+    assert second.status_code == 200, "재생은 '생성'이 아니다 — 201로 답하면 거짓말이다"
+    assert second.json()["id"] == first.json()["id"]
+
+    with session_factory() as s:
+        stock = receiving_crud.get_stock_map(s, [_uuid.UUID(vid)])
+    assert stock[_uuid.UUID(vid)] == 5, "10이면 재시도가 재고를 두 배로 만든 것"
+
+
+def test_different_keys_create_separate_records(client, session_factory):
+    """다음 병은 별개 입고다 — 키가 다르면 당연히 두 건."""
+    import uuid as _uuid
+
+    token = _token(client)
+    vid = _a_vintage_id(client, token)
+    _create_with_key(client, token, vid, str(_uuid.uuid4()), quantity=3)
+    _create_with_key(client, token, vid, str(_uuid.uuid4()), quantity=3)
+
+    with session_factory() as s:
+        stock = receiving_crud.get_stock_map(s, [_uuid.UUID(vid)])
+    assert stock[_uuid.UUID(vid)] == 6
+
+
+def test_no_key_still_creates_every_time(client, session_factory):
+    """키 없는 호출(스크립트·배치)은 현행대로 매번 생성된다."""
+    import uuid as _uuid
+
+    token = _token(client)
+    vid = _a_vintage_id(client, token)
+    assert _create(client, token, vid, quantity=2).status_code == 201
+    assert _create(client, token, vid, quantity=2).status_code == 201
+
+    with session_factory() as s:
+        stock = receiving_crud.get_stock_map(s, [_uuid.UUID(vid)])
+    assert stock[_uuid.UUID(vid)] == 4
+
+
+def test_race_on_same_key_does_not_500(client, session_factory, monkeypatch):
+    """선조회를 나란히 통과한 경합 — unique 제약이 최종 방어선이고 500이 아니어야 한다.
+
+    실제 경합은 "다른 워커가 이미 커밋했는데 선조회는 아직 못 본" 창이다. 그 창을
+    재현하기 위해 선조회의 **첫 호출만** 못 찾은 것처럼 만든다. 그러면 INSERT가 제약에
+    걸리고, 라우트의 IntegrityError 폴백이 동작해야 한다.
+    """
+    import uuid as _uuid
+
+    from app.api.routes import receiving as receiving_route
+
+    token = _token(client)
+    vid = _a_vintage_id(client, token)
+    key = _uuid.uuid4()
+
+    created = _create_with_key(client, token, vid, str(key), quantity=1)
+    assert created.status_code == 201
+
+    real = receiving_crud.find_by_idempotency_key
+    calls = {"n": 0}
+
+    def _blind_once(session, k):
+        calls["n"] += 1
+        return None if calls["n"] == 1 else real(session, k)
+
+    monkeypatch.setattr(
+        receiving_route.receiving_crud, "find_by_idempotency_key", _blind_once
+    )
+
+    replayed = _create_with_key(client, token, vid, str(key), quantity=1)
+    assert replayed.status_code == 200, "경합에서 500을 내면 클라이언트가 또 재시도한다"
+    assert replayed.json()["id"] == created.json()["id"]
+    assert calls["n"] == 2, "선조회 실패 후 except 경로에서 재조회해야 한다"
+
+    with session_factory() as s:
+        stock = receiving_crud.get_stock_map(s, [_uuid.UUID(vid)])
+    assert stock[_uuid.UUID(vid)] == 1
+
+
 def test_stock_map_sums_and_excludes_soft_deleted(client, session_factory):
     token = _token(client)
     vid = _a_vintage_id(client, token)

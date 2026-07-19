@@ -18,6 +18,7 @@ class ReceivingRepository {
     required String wineVintageId,
     required int quantity,
     String? memo,
+    String? idempotencyKey,
   }) async {
     final resp = await _dio.post<Map<String, dynamic>>(
       '/receiving',
@@ -25,6 +26,7 @@ class ReceivingRepository {
         'wine_vintage_id': wineVintageId,
         'quantity': quantity,
         'memo': ?memo,
+        'idempotency_key': ?idempotencyKey,
       },
     );
     return resp.data?['id'] as String?;

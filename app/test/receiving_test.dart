@@ -22,14 +22,17 @@ class _FakeReceivingRepo extends ReceivingRepository {
   final int? statusCode;
   final Duration delay;
   int calls = 0;
+  final List<String?> keysSeen = [];
 
   @override
-  Future<String> create({
+  Future<String?> create({
     required String wineVintageId,
     required int quantity,
     String? memo,
+    String? idempotencyKey,
   }) async {
     calls++;
+    keysSeen.add(idempotencyKey);
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     if (fail) {
       // 실제 실패는 DioException으로 온다. 일반 Exception을 던지면 컨트롤러가
@@ -191,6 +194,33 @@ void main() {
       await Future<void>.delayed(Duration.zero);
       expect(c.read(receivingControllerProvider).quantity, 1,
           reason: '다른 와인에 이전 수량이 새면 조용한 오기록이 된다');
+    });
+
+    testWidgets('재시도는 같은 멱등 키를 재사용한다', (tester) async {
+      // 재시도마다 키가 바뀌면 서버가 중복을 구분하지 못해 멱등성이 통째로 무력해진다.
+      final repo = _FakeReceivingRepo(fail: true);
+      final c = _container(repo);
+      final ctrl = c.read(receivingControllerProvider.notifier);
+
+      await ctrl.submit('v1');
+      await ctrl.submit('v1');
+
+      expect(repo.keysSeen.length, 2);
+      expect(repo.keysSeen[0], isNotNull);
+      expect(repo.keysSeen[0], repo.keysSeen[1], reason: '실패 후 재시도는 같은 병이다');
+    });
+
+    testWidgets('입고 성공 후에는 새 멱등 키가 발급된다', (tester) async {
+      // 다음 병까지 같은 키를 쓰면 서버가 두 번째 입고를 '재생'으로 보고 삼킨다.
+      final repo = _FakeReceivingRepo();
+      final c = _container(repo);
+      final ctrl = c.read(receivingControllerProvider.notifier);
+
+      await ctrl.submit('v1');
+      await ctrl.submit('v1');
+
+      expect(repo.keysSeen.length, 2);
+      expect(repo.keysSeen[0], isNot(repo.keysSeen[1]));
     });
 
     testWidgets('401은 재시도가 아니라 재로그인을 안내한다', (tester) async {

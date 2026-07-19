@@ -60,6 +60,7 @@ development_status:
   2-4-매칭-확인-카드: review
   2-5-빈티지-후보-선택: review
   2-6-수량-지정-입고-완료: review
+  2-7-입고-멱등성: review         # 코드리뷰 이월(2.6 High): 서버 측 멱등성
   epic-2-retrospective: optional
 
   # Epic 3 — 신규 와인 등록 & 초기 세팅

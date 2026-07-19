@@ -44,6 +44,9 @@ class ReceivingRecord(SQLModel, table=True):
     )
     staff_id: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)
     memo: str | None = None  # FR12 — 입력 UI는 Story 4.3
+    # 재시도 중복 방지(Story 2.7). nullable — 키 없는 호출(스크립트·배치)을 막지 않는다.
+    # PostgreSQL·SQLite 모두 unique 인덱스에서 NULL끼리는 충돌하지 않는다.
+    idempotency_key: uuid.UUID | None = Field(default=None, unique=True, index=True)
     # soft-delete 전용 (AR6). 하드삭제 금지.
     deleted_at: datetime | None = Field(
         default=None, sa_column=_tz_column(index=True, nullable=True)
