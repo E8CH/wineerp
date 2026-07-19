@@ -29,6 +29,11 @@ class ScanScreen extends ConsumerWidget {
     ref.invalidate(receivingControllerProvider);
     ref.read(registeredCandidateProvider.notifier).state = null;
     ref.read(registeringProvider.notifier).state = false;
+    // ⚠️ 등록 폼 상태도 반드시 버린다. 확인 패널 뒤에서 카메라가 계속 돌기 때문에,
+    // 와인 A를 입력하는 중 다음 병의 바코드 B가 프레임에 들어오면 패널이 새 키로
+    // 재생성되어 **텍스트 필드는 비어 보이는데** RegistrationState에는 A의 사진·생산자·
+    // 모델명이 남는다. canSubmit이 true라 버튼이 눌리고, A의 데이터가 B로 등록된다.
+    ref.read(registrationControllerProvider.notifier).reset();
     try {
       final result = await ref.read(scanRepositoryProvider).scan(code);
       _set(ref, AsyncData(result));

@@ -258,4 +258,49 @@ void main() {
       expect(got, 'v1', reason: '등록 직후 수량 입력으로 이어져야 한다');
     });
   });
+
+  group('늦게 도착한 비동기 결과 (코드리뷰 C2·C3)', () {
+    test('사용자가 직접 입력하면 진행 중이던 추론 결과를 버린다', () async {
+      // 덮어쓰면 사용자가 친 글자가 사라지고 커서가 튄다.
+      final c = _container(
+        inference: const InferenceResult(modelName: 'AI 값', confidence: 0.9),
+      );
+      final ctrl = c.read(registrationControllerProvider.notifier);
+      await ctrl.captureLabel();
+
+      final infer = ctrl.inferModelName(); // 진행 중
+      ctrl.setModelName('사용자가 친 값'); // 사용자가 필드를 가져간다
+      await infer;
+
+      expect(c.read(registrationControllerProvider).modelName, '사용자가 친 값');
+      expect(c.read(registrationControllerProvider).isAiFilled, isFalse);
+    });
+
+    test('[직접입력] 후 도착한 추론 결과도 무시된다', () async {
+      final c = _container(
+        inference: const InferenceResult(modelName: 'AI 값', confidence: 0.9),
+      );
+      final ctrl = c.read(registrationControllerProvider.notifier);
+      await ctrl.captureLabel();
+
+      final infer = ctrl.inferModelName();
+      ctrl.useManualInput();
+      await infer;
+
+      expect(c.read(registrationControllerProvider).isAiFilled, isFalse);
+      expect(c.read(registrationControllerProvider).modelName, isEmpty);
+    });
+
+    test('다음 병으로 넘어간 뒤 도착한 업로드 결과는 버린다', () async {
+      // 남으면 작업자가 찍지 않은 사진이 다음 병의 폼에 붙는다.
+      final c = _container();
+      final ctrl = c.read(registrationControllerProvider.notifier);
+
+      final capture = ctrl.captureLabel();
+      ctrl.reset(); // 다음 병
+      await capture;
+
+      expect(c.read(registrationControllerProvider).hasPhoto, isFalse);
+    });
+  });
 }

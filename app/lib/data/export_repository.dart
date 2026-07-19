@@ -26,7 +26,9 @@ class ExportRepository {
       options: Options(responseType: ResponseType.bytes),
     );
 
-    final name = _filenameFrom(resp.headers) ?? 'wineerp-receiving.xlsx';
+    // ⚠️ 서버 헤더의 파일명을 그대로 경로에 붙이지 않는다. 지금 서버는 안전한
+    // ASCII만 만들지만, 프록시나 향후 변경이 `../`를 흘리면 임시 디렉터리 밖에 쓴다.
+    final name = _safeName(_filenameFrom(resp.headers));
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/$name');
     await file.writeAsBytes(resp.data!);
@@ -40,7 +42,17 @@ class ExportRepository {
     return file.path;
   }
 
-  /// 서버가 정한 파일명을 그대로 쓴다 — 기간이 이름에 들어 있어 보고서에 첨부했을 때
+  /// 경로 구분자·상위 이동을 제거하고 파일명만 남긴다.
+  String _safeName(String? raw) {
+    final base = (raw ?? '')
+        .replaceAll('\\', '/')
+        .split('/')
+        .last
+        .replaceAll('..', '');
+    return base.isEmpty ? 'wineerp-receiving.xlsx' : base;
+  }
+
+  /// 서버가 정한 파일명을 쓴다 — 기간이 이름에 들어 있어 보고서에 첨부했을 때
   /// 어느 기간인지 파일만 봐도 알 수 있다.
   String? _filenameFrom(Headers headers) {
     final disposition = headers.value('content-disposition');

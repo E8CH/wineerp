@@ -104,16 +104,27 @@ class RegistrationState {
 }
 
 class RegistrationController extends Notifier<RegistrationState> {
+  /// 폼의 "세대". 리셋하거나 사용자가 직접 입력하면 올라간다.
+  ///
+  /// ⚠️ 이 프로바이더는 autoDispose가 아니라서, 패널이 사라진 뒤 도착한 비동기 응답도
+  /// `state =`가 조용히 성공한다. 크래시보다 나쁘다 — 업로드/추론 결과가 **다음 병의
+  /// 폼**에 찍히고, 작업자는 자기가 찍지 않은 사진과 이전 병의 모델명을 보게 된다.
+  /// await 전후로 세대를 비교해 늦게 온 결과를 버린다.
+  int _generation = 0;
+
   @override
   RegistrationState build() => const RegistrationState();
 
   Future<void> captureLabel() async {
+    final gen = _generation;
     final bytes = await ref.read(labelPickerProvider)();
     if (bytes == null) return; // 사용자가 취소
     try {
       final result = await ref.read(imageUploadServiceProvider).upload(bytes);
+      if (gen != _generation) return; // 다음 병으로 넘어간 뒤 도착 — 버린다
       state = state.copyWith(imageKey: result.key, clearError: true);
     } catch (_) {
+      if (gen != _generation) return;
       state = state.copyWith(error: '사진 업로드 실패 · 다시 촬영하세요');
     }
   }
@@ -125,9 +136,13 @@ class RegistrationController extends Notifier<RegistrationState> {
   Future<void> inferModelName() async {
     final key = state.imageKey;
     if (key == null || state.isInferring) return;
+    final gen = _generation;
     state = state.copyWith(phase: InferencePhase.inferring, clearError: true);
     try {
       final r = await ref.read(inferenceRepositoryProvider).inferLabel(key);
+      // 사용자가 [직접입력]을 눌렀거나 직접 타이핑했거나 다음 병으로 넘어갔으면
+      // 이 응답은 늦은 것이다. 덮어쓰면 사용자가 친 글자가 사라지고 커서가 튄다.
+      if (gen != _generation) return;
       if (r.needsManualInput) {
         state = state.copyWith(
           phase: InferencePhase.failed,
@@ -142,6 +157,7 @@ class RegistrationController extends Notifier<RegistrationState> {
         phase: InferencePhase.done,
       );
     } catch (_) {
+      if (gen != _generation) return;
       state = state.copyWith(
         phase: InferencePhase.failed,
         error: '추론 실패 · 직접 입력해주세요',
@@ -150,8 +166,11 @@ class RegistrationController extends Notifier<RegistrationState> {
   }
 
   /// 사용자가 값을 건드리면 더 이상 AI 값이 아니다 — 태그를 내린다.
-  void setModelName(String v) =>
-      state = state.copyWith(modelName: v, isAiFilled: false, lowConfidence: false);
+  void setModelName(String v) {
+    // 사용자가 직접 쳤으면 이 필드는 사용자 것이다 — 진행 중인 추론 결과를 무효화한다.
+    _generation++;
+    state = state.copyWith(modelName: v, isAiFilled: false, lowConfidence: false);
+  }
 
   void setProducer(String v) => state = state.copyWith(producer: v);
 
@@ -167,14 +186,21 @@ class RegistrationController extends Notifier<RegistrationState> {
       : state.copyWith(initialQuantity: q);
 
   /// 추론을 건너뛰고 즉시 수동 입력으로. 대기 중에도 눌린다(폴백 상시 노출).
-  void useManualInput() =>
-      state = state.copyWith(phase: InferencePhase.idle, clearError: true);
+  void useManualInput() {
+    // 진행 중인 추론을 취소할 수는 없지만, 그 결과를 받아들이지는 않는다.
+    _generation++;
+    state = state.copyWith(phase: InferencePhase.idle, clearError: true);
+  }
 
-  void reset() => state = const RegistrationState();
+  void reset() {
+    _generation++;
+    state = const RegistrationState();
+  }
 
   /// 등록. 성공 시 생성된 `vintage_id`를 반환해 곧바로 입고로 이어진다.
   Future<String?> submit({String? barcode}) async {
     if (!state.canSubmit) return null;
+    final gen = _generation;
     state = state.copyWith(submitting: true, clearError: true);
     try {
       final created = await ref.read(wineRepositoryProvider).create(
@@ -190,9 +216,11 @@ class RegistrationController extends Notifier<RegistrationState> {
           );
       // ⚠️ 성공 경로에서도 반드시 내린다. 호출자가 reset()을 부를 것이라고 가정하면,
       // 부르지 않는 호출자에게는 영원히 도는 스피너와 잠긴 폼이 남는다.
+      if (gen != _generation) return created.vintageId; // 폼은 이미 다음 병 것
       state = state.copyWith(submitting: false);
       return created.vintageId;
     } catch (_) {
+      if (gen != _generation) return null;
       state = state.copyWith(submitting: false, error: '등록 실패 · 다시 시도하세요');
       return null;
     }

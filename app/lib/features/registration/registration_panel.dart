@@ -50,7 +50,10 @@ class _RegistrationPanelState extends ConsumerState<RegistrationPanel> {
     final id = await ref
         .read(registrationControllerProvider.notifier)
         .submit(barcode: widget.barcode);
-    if (id != null) widget.onRegistered(id);
+    // ⚠️ mounted 확인 없이 콜백을 부르면, 저장 중 세팅 모드를 나갔을 때 콜백 안의
+    // `ref.read`가 이미 죽은 엘리먼트에 닿아 StateError가 uncaught로 샌다.
+    // 와인은 서버에 생성된 채로 카운터도 안 오르고 확인도 못 받는다.
+    if (id != null && mounted) widget.onRegistered(id);
   }
 
   @override

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
 import '../../data/history_repository.dart';
+import '../../data/report_repository.dart';
 import 'widgets/amend_sheet.dart';
 import 'widgets/history_row.dart';
 import 'widgets/history_skeleton.dart';
@@ -68,14 +69,16 @@ Future<void> _openAmendSheet(
   await showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder: (ctx) => AmendSheet(
-      item: item,
-      onDone: () {
-        Navigator.of(ctx).pop();
-        ref.invalidate(historyProvider);
-      },
-    ),
+    builder: (ctx) => AmendSheet(item: item, onDone: () => Navigator.of(ctx).pop()),
   );
+  // ⚠️ 갱신을 시트의 onDone에 걸면, 저장 중 스와이프로 시트를 내렸을 때
+  // (mounted=false) 콜백이 안 불려 서버는 수정됐는데 목록은 옛 수량을 보여준다.
+  // 사용자는 저장 실패로 읽고 한 번 더 수정해 이력이 두 줄 남는다.
+  // 어떻게 닫혔든 무조건 다시 읽는다.
+  ref.invalidate(historyProvider);
+  // 수정은 재고를 바꾸므로 리포트도 낡는다. 갱신하지 않으면 화면은 12병,
+  // 같은 기간 엑셀은 2병이 되어 회장에게 가는 쪽이 화면과 어긋난다.
+  ref.invalidate(reportProvider);
 }
 
 class _EmptyState extends StatelessWidget {

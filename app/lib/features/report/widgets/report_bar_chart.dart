@@ -38,7 +38,9 @@ class ReportBarChart extends StatelessWidget {
                     bucket: b,
                     peak: peak,
                     isPeak: peak > 0 && b.quantity == peak,
-                    showLabel: slot >= 18,
+                    // 좁으면 전부 숨기는 대신 5일 간격으로 남긴다. 전부 숨기면
+                    // 월간 차트에 x축이 아예 없어 "언제" 튀었는지 알 수 없다.
+                    showLabel: slot >= 18 || _isLabelTick(b),
                   ),
                 ),
             ],
@@ -47,6 +49,12 @@ class ReportBarChart extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 좁은 차트에서 남길 눈금(1·5·10·15·20·25·30일).
+bool _isLabelTick(DayBucket b) {
+  final day = int.tryParse(b.dayLabel) ?? 0;
+  return day == 1 || day % 5 == 0;
 }
 
 class _Bar extends StatelessWidget {
@@ -72,17 +80,26 @@ class _Bar extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            // 피크를 색만으로 전달하지 않는다 — 수치를 함께 띄운다(UX-DR15).
-            if (isPeak)
-              Text(
-                '${bucket.quantity}',
-                key: const Key('peak_label'),
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.categoryStock,
-                ),
-              ),
+            // ⚠️ 라벨 자리를 **모든 막대에** 동일하게 잡는다. 피크에만 넣으면 피크의
+            // Expanded가 그만큼 짧아져, 95%짜리 이웃이 100%인 피크보다 **길게** 그려진다.
+            // 막대 순서가 데이터와 어긋나면 그건 미관이 아니라 데이터 결함이다.
+            // 피크는 색만이 아니라 수치로도 전달한다(UX-DR15).
+            SizedBox(
+              height: 14,
+              child: isPeak
+                  ? FittedBox(
+                      child: Text(
+                        '${bucket.quantity}',
+                        key: const Key('peak_label'),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.categoryStock,
+                        ),
+                      ),
+                    )
+                  : null,
+            ),
             const SizedBox(height: 2),
             Expanded(
               child: FractionallySizedBox(
@@ -91,8 +108,11 @@ class _Bar extends StatelessWidget {
                 heightFactor: ratio == 0 ? 0.012 : ratio.clamp(0.03, 1.0),
                 child: Container(
                   decoration: BoxDecoration(
+                    // 0인 날은 배경색(#F6F7F9)이면 카드(#FFFFFF)와 1.04:1이라
+                    // 사실상 보이지 않는다 — "없는 날"과 "렌더 실패"를 구분하려던
+                    // 의도가 달성되지 않는다. 눈에 띄는 회색으로 낮춘다.
                     color: bucket.quantity == 0
-                        ? AppColors.background
+                        ? AppColors.muted.withValues(alpha: 0.35)
                         : (isPeak ? AppColors.categoryStock : AppColors.navy),
                     borderRadius: const BorderRadius.vertical(
                       top: Radius.circular(3),
