@@ -55,6 +55,30 @@ class WineProductRead {
       );
 }
 
+/// 후보 1건 = (제품, 빈티지) 쌍. 바코드는 빈티지를 구분하지 못하므로(AR3)
+/// 사용자가 라벨을 보고 이 중 하나를 확정한다.
+class VintageCandidate {
+  const VintageCandidate({required this.product, this.vintage});
+
+  final WineProductRead product;
+
+  /// null = 해당 제품에 등록된 빈티지 행이 없음(NV와 다름 — NV는 vintage.vintage가 null).
+  final WineVintageRead? vintage;
+
+  /// 선택 비교용 키. `WineVintageRead`에 `==`/`hashCode`가 없어 객체 동등성에 의존할 수 없다.
+  String get id => vintage?.id ?? 'product:${product.id}';
+
+  int? get year => vintage?.vintage;
+
+  /// 빈티지 행이 있으면 연도 또는 NV, 없으면 미등록.
+  /// NV(Non-Vintage)는 인식 실패가 아니라 1급 유효 상태다 — 오류로 표시하지 말 것.
+  String get vintageLabel =>
+      vintage == null ? '빈티지 미등록' : (year?.toString() ?? 'NV');
+
+  /// 빈티지 행이 없으면 입고 대상이 될 수 없다(receiving_records가 wine_vintage_id를 요구).
+  bool get isSelectable => vintage != null;
+}
+
 class ScanResult {
   const ScanResult({required this.code, required this.products});
 
@@ -62,6 +86,17 @@ class ScanResult {
   final List<WineProductRead> products;
 
   bool get isMatched => products.isNotEmpty;
+
+  /// 제품×빈티지를 평탄화한 후보 목록. 서버 정렬(최신 우선·NV 최후)을 그대로 보존한다.
+  /// 빈티지가 없는 제품도 후보로 남긴다 — 빼면 스캔 결과가 조용히 사라진다.
+  List<VintageCandidate> get candidates => [
+        for (final p in products)
+          if (p.vintages.isEmpty)
+            VintageCandidate(product: p)
+          else
+            for (final v in p.vintages)
+              VintageCandidate(product: p, vintage: v),
+      ];
 
   factory ScanResult.fromJson(Map<String, dynamic> json) => ScanResult(
         code: json['code'] as String,

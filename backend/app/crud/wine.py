@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy import desc, nullslast
 from sqlmodel import Session, select
 
 from app.models.wine import (
@@ -84,8 +85,16 @@ def find_products_by_barcode(session: Session, code: str) -> list[WineProduct]:
 def get_vintages_for_product(
     session: Session, wine_product_id: uuid.UUID
 ) -> list[WineVintage]:
+    """후보 목록용 결정적 정렬: 최신 빈티지 우선, NV(NULL)는 최후.
+
+    ⚠️ `nullslast()`는 필수. PostgreSQL은 DESC에서 NULL을 먼저, SQLite는 나중에 두므로
+    생략하면 테스트(SQLite)는 통과하고 운영(PostgreSQL)에서 NV가 목록 맨 위로 올라온다.
+    순서는 UX 계약이다(첫 항목이 가장 눌릴 확률이 높음) — 프론트에서 재정렬하지 말 것.
+    """
     return list(
         session.exec(
-            select(WineVintage).where(WineVintage.wine_product_id == wine_product_id)
+            select(WineVintage)
+            .where(WineVintage.wine_product_id == wine_product_id)
+            .order_by(nullslast(desc(WineVintage.vintage)))
         ).all()
     )

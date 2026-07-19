@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/scan_models.dart';
 import '../../data/scan_repository.dart';
+import '../receiving/widgets/candidate_list.dart';
 import '../receiving/widgets/receiving_confirm_card.dart';
 import 'scan_controller.dart';
 import 'widgets/scanner_overlay.dart';
@@ -13,6 +14,9 @@ class ScanScreen extends ConsumerWidget {
 
   Future<void> _match(WidgetRef ref, String code) async {
     ref.read(matchProvider.notifier).state = const AsyncLoading();
+    // 다음 병으로 넘어갈 때 이전 선택이 남으면 안 된다 — matchProvider는 루트
+    // 프로바이더라 자동 리셋되지 않으므로 명시적으로 지운다.
+    ref.read(selectedCandidateProvider.notifier).state = null;
     try {
       final result = await ref.read(scanRepositoryProvider).scan(code);
       ref.read(matchProvider.notifier).state = AsyncData(result);
@@ -46,13 +50,13 @@ class ScanScreen extends ConsumerWidget {
   }
 }
 
-class _MatchResult extends StatelessWidget {
+class _MatchResult extends ConsumerWidget {
   const _MatchResult({required this.match});
 
   final AsyncValue<ScanResult?> match;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return match.when(
       loading: () => const Card(
         child: ListTile(
@@ -72,24 +76,83 @@ class _MatchResult extends StatelessWidget {
       ),
       data: (result) {
         if (result == null) return const SizedBox.shrink();
-        if (!result.isMatched) {
-          return const Card(
-            child: ListTile(
-              leading: Icon(Icons.help_outline),
-              title: Text('미등록 와인'),
-              subtitle: Text('새로 등록하시겠습니까? (신규 등록은 곧 제공)'),
+        final candidates = result.candidates;
+        if (candidates.isEmpty) return const _UnregisteredCard();
+
+        // 후보가 하나뿐이면 고를 것이 없으므로 확인 카드로 직행한다.
+        // 둘 이상이면 반드시 사람이 라벨을 보고 고른다 — "최신 빈티지" 같은
+        // 기본 선택으로 탭을 줄이는 최적화는 이 화면의 목적을 무효화한다.
+        if (candidates.length == 1) {
+          return _ConfirmFor(candidate: candidates.single, canReselect: false);
+        }
+
+        final selectedId = ref.watch(selectedCandidateProvider);
+        if (selectedId == null) {
+          return CandidateList(
+            candidates: candidates,
+            onSelect: (c) =>
+                ref.read(selectedCandidateProvider.notifier).state = c.id,
+            onNotListed: () =>
+                ref.read(matchProvider.notifier).state = AsyncData(
+              ScanResult(code: result.code, products: const []),
             ),
           );
         }
-        final product = result.products.first;
-        final vintage =
-            product.vintages.isNotEmpty ? product.vintages.first.vintage : null;
-        return ReceivingConfirmCard(
-          modelName: product.modelName,
-          producer: product.producer,
-          vintage: vintage,
+
+        final selected = candidates.firstWhere(
+          (c) => c.id == selectedId,
+          orElse: () => candidates.first,
         );
+        return _ConfirmFor(candidate: selected, canReselect: true);
       },
+    );
+  }
+}
+
+class _UnregisteredCard extends StatelessWidget {
+  const _UnregisteredCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Card(
+      child: ListTile(
+        leading: Icon(Icons.help_outline),
+        title: Text('미등록 와인'),
+        subtitle: Text('새로 등록하시겠습니까? (신규 등록은 곧 제공)'),
+      ),
+    );
+  }
+}
+
+/// 확정된 후보의 확인 카드. 오선택 시 즉시 목록으로 되돌아갈 수 있어야 한다.
+class _ConfirmFor extends ConsumerWidget {
+  const _ConfirmFor({required this.candidate, required this.canReselect});
+
+  final VintageCandidate candidate;
+  final bool canReselect;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final card = ReceivingConfirmCard(
+      modelName: candidate.product.modelName,
+      producer: candidate.product.producer,
+      vintage: candidate.year,
+    );
+    if (!canReselect) return card;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        card,
+        TextButton.icon(
+          key: const Key('reselect_candidate'),
+          onPressed: () =>
+              ref.read(selectedCandidateProvider.notifier).state = null,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('다시 선택'),
+        ),
+      ],
     );
   }
 }

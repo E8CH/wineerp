@@ -40,3 +40,10 @@ final cameraEnabledProvider = Provider<bool>((ref) => true);
 final matchProvider =
     StateProvider<AsyncValue<ScanResult?>>((ref) => const AsyncData(null));
 
+/// 선택된 빈티지 후보의 id (Story 2.5). null = 아직 고르지 않음.
+///
+/// ⚠️ 위젯 로컬 state가 아니라 프로바이더에 두는 이유: 폴드 접기/펴기는 Activity 구성
+/// 변경으로 위젯 트리를 재빌드하므로, 로컬 state면 진행 중이던 선택이 사라진다(UX-DR14).
+/// `WineVintageRead`에 `==`가 없어 객체가 아닌 id 문자열로 비교한다.
+final selectedCandidateProvider = StateProvider<String?>((ref) => null);
+
