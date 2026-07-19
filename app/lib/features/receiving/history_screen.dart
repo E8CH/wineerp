@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
 import '../../data/history_repository.dart';
+import 'widgets/amend_sheet.dart';
 import 'widgets/history_row.dart';
 import 'widgets/history_skeleton.dart';
 
@@ -44,7 +45,10 @@ class HistoryScreen extends ConsumerWidget {
                         padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
                         itemCount: items.length,
                         separatorBuilder: (_, _) => const SizedBox(height: 10),
-                        itemBuilder: (_, i) => HistoryRow(item: items[i]),
+                        itemBuilder: (_, i) => HistoryRow(
+                          item: items[i],
+                          onTap: () => _openAmendSheet(context, ref, items[i]),
+                        ),
                       ),
                     ),
             ),
@@ -53,6 +57,25 @@ class HistoryScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// 행을 탭하면 수정 시트. 저장·취소 후 목록을 갱신한다.
+Future<void> _openAmendSheet(
+  BuildContext context,
+  WidgetRef ref,
+  HistoryItem item,
+) async {
+  await showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) => AmendSheet(
+      item: item,
+      onDone: () {
+        Navigator.of(ctx).pop();
+        ref.invalidate(historyProvider);
+      },
+    ),
+  );
 }
 
 class _EmptyState extends StatelessWidget {

@@ -58,3 +58,12 @@ class ReceivingHistoryItem(BaseModel):
 class ReceivingHistory(BaseModel):
     data: list[ReceivingHistoryItem]
     count: int
+
+
+class ReceivingUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # 0으로 만들려면 수정이 아니라 취소(DELETE)를 쓴다 — 되돌리기 비용이 달라
+    # 권한도 다르다(취소는 manager 전용).
+    quantity: int = Field(ge=1, le=MAX_QUANTITY)
+    reason: str | None = Field(default=None, max_length=200)

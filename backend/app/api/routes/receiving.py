@@ -1,13 +1,15 @@
 """입고 확정 라우트 (FR7)."""
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentManager, CurrentUser, SessionDep
 from app.crud import receiving as receiving_crud
 from app.models.wine import WineVintage
-from app.schemas.receiving import ReceivingCreate, ReceivingRead
+from app.schemas.receiving import ReceivingCreate, ReceivingRead, ReceivingUpdate
 
 router = APIRouter(prefix="/receiving", tags=["receiving"])
 
@@ -61,3 +63,47 @@ def create_receiving(
         return ReceivingRead.model_validate(existing)
 
     return ReceivingRead.model_validate(record)
+
+
+@router.patch("/{record_id}", response_model=ReceivingRead)
+def update_receiving(
+    record_id: uuid.UUID,
+    payload: ReceivingUpdate,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> ReceivingRead:
+    """수량 정정(FR8). 수정 이력은 `receiving_amendments`에 행으로 남는다."""
+    record = receiving_crud.get_record(session, record_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="입고 기록을 찾을 수 없습니다.",
+        )
+    updated = receiving_crud.update_quantity(
+        session,
+        record,
+        quantity=payload.quantity,
+        changed_by=current_user.id,
+        reason=payload.reason,
+    )
+    return ReceivingRead.model_validate(updated)
+
+
+@router.delete("/{record_id}", response_model=ReceivingRead)
+def cancel_receiving(
+    record_id: uuid.UUID,
+    session: SessionDep,
+    _: CurrentManager,
+) -> ReceivingRead:
+    """입고 취소 — soft-delete만(AR6).
+
+    ⚠️ **manager 전용.** 수정은 되돌릴 수 있지만 취소는 재고에서 통째로 빼는 일이고
+    이 범위에 복구 UI가 없다. 되돌리기 비용이 다르면 권한도 달라야 한다.
+    """
+    record = receiving_crud.get_record(session, record_id)
+    if record is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="입고 기록을 찾을 수 없습니다.",
+        )
+    return ReceivingRead.model_validate(receiving_crud.soft_delete(session, record))

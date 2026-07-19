@@ -90,3 +90,30 @@ final historyProvider = FutureProvider<List<HistoryItem>>((ref) {
   final period = ref.watch(historyPeriodProvider);
   return ref.watch(historyRepositoryProvider).list(period);
 });
+
+/// 입고 수정·취소 (FR8, Story 4.2).
+class ReceivingAmendRepository {
+  ReceivingAmendRepository(this._dio);
+
+  final Dio _dio;
+
+  Future<void> updateQuantity(
+    String recordId, {
+    required int quantity,
+    String? reason,
+  }) async {
+    await _dio.patch<Map<String, dynamic>>(
+      '/receiving/$recordId',
+      data: {'quantity': quantity, 'reason': ?reason},
+    );
+  }
+
+  /// 취소는 서버에서 soft-delete로 처리되며 **manager 전용**이다(403 가능).
+  Future<void> cancel(String recordId) async {
+    await _dio.delete<Map<String, dynamic>>('/receiving/$recordId');
+  }
+}
+
+final receivingAmendRepositoryProvider = Provider<ReceivingAmendRepository>(
+  (ref) => ReceivingAmendRepository(ref.watch(dioProvider)),
+);

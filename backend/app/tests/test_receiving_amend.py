@@ -1,0 +1,230 @@
+"""Story 4.2 — 입고 수량 수정·취소 (FR8, AR6)."""
+from __future__ import annotations
+
+import uuid as _uuid
+from collections.abc import Iterator
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine
+
+from app.core.db import get_session
+from app.crud import receiving as receiving_crud
+from app.main import app
+from app.models.user import User, UserRole
+from app.seed.wines import seed_demo_wines
+
+API = "/api/v1"
+
+
+@pytest.fixture
+def engine():
+    eng = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    SQLModel.metadata.create_all(eng)
+    with Session(eng) as s:
+        seed_demo_wines(s)
+    return eng
+
+
+@pytest.fixture
+def client(engine) -> Iterator[TestClient]:
+    def _session() -> Iterator[Session]:
+        with Session(engine) as s:
+            yield s
+
+    app.dependency_overrides[get_session] = _session
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+def _token(client: TestClient, email="staff@wineerp.co") -> str:
+    client.post(f"{API}/auth/signup", json={"email": email, "password": "pw123456"})
+    return client.post(
+        f"{API}/auth/login", data={"username": email, "password": "pw123456"}
+    ).json()["access_token"]
+
+
+def _manager_token(client: TestClient, engine) -> str:
+    token = _token(client, "mgr@wineerp.co")
+    with Session(engine) as s:
+        user = s.exec(
+            __import__("sqlmodel").select(User).where(User.email == "mgr@wineerp.co")
+        ).one()
+        user.role = UserRole.manager
+        s.add(user)
+        s.commit()
+    return token
+
+
+def _h(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _make_record(client, token) -> dict:
+    vid = client.post(
+        f"{API}/scan", json={"code": "3760000000015"}, headers=_h(token)
+    ).json()["products"][0]["vintages"][0]["id"]
+    return client.post(
+        f"{API}/receiving",
+        json={"wine_vintage_id": vid, "quantity": 12},
+        headers=_h(token),
+    ).json()
+
+
+def _stock(engine, vintage_id: str) -> int:
+    with Session(engine) as s:
+        vid = _uuid.UUID(vintage_id)
+        return receiving_crud.get_stock_map(s, [vid])[vid]
+
+
+# --- 수정 ---------------------------------------------------------------------
+
+
+def test_update_quantity_returns_200_and_reflects_stock(client, engine):
+    token = _token(client)
+    rec = _make_record(client, token)
+    assert _stock(engine, rec["wine_vintage_id"]) == 12
+
+    resp = client.patch(
+        f"{API}/receiving/{rec['id']}", json={"quantity": 9}, headers=_h(token)
+    )
+    assert resp.status_code == 200
+    assert resp.json()["quantity"] == 9
+    assert _stock(engine, rec["wine_vintage_id"]) == 9
+
+
+def test_amendment_row_records_before_and_after(client, engine):
+    """🔴 최종 수량만 덮어쓰면 무엇이 얼마에서 얼마로 바뀌었는지 사라진다."""
+    token = _token(client)
+    rec = _make_record(client, token)
+    client.patch(
+        f"{API}/receiving/{rec['id']}",
+        json={"quantity": 9, "reason": "오입력"},
+        headers=_h(token),
+    )
+
+    with Session(engine) as s:
+        history = receiving_crud.list_amendments(s, _uuid.UUID(rec["id"]))
+    assert len(history) == 1
+    assert (history[0].before_quantity, history[0].after_quantity) == (12, 9)
+    assert history[0].reason == "오입력"
+    assert history[0].changed_by is not None
+
+
+def test_repeated_edits_accumulate_history(client, engine):
+    token = _token(client)
+    rec = _make_record(client, token)
+    for q in (10, 8, 7):
+        client.patch(f"{API}/receiving/{rec['id']}", json={"quantity": q}, headers=_h(token))
+
+    with Session(engine) as s:
+        history = receiving_crud.list_amendments(s, _uuid.UUID(rec["id"]))
+    assert [(h.before_quantity, h.after_quantity) for h in history] == [
+        (12, 10),
+        (10, 8),
+        (8, 7),
+    ]
+
+
+def test_same_quantity_leaves_no_amendment(client, engine):
+    """변경이 없으면 이력에 잡음을 남기지 않는다."""
+    token = _token(client)
+    rec = _make_record(client, token)
+    resp = client.patch(
+        f"{API}/receiving/{rec['id']}", json={"quantity": 12}, headers=_h(token)
+    )
+    assert resp.status_code == 200
+    with Session(engine) as s:
+        assert receiving_crud.list_amendments(s, _uuid.UUID(rec["id"])) == []
+
+
+def test_update_validates_range(client):
+    token = _token(client)
+    rec = _make_record(client, token)
+    assert client.patch(
+        f"{API}/receiving/{rec['id']}", json={"quantity": 0}, headers=_h(token)
+    ).status_code == 422
+    assert client.patch(
+        f"{API}/receiving/{rec['id']}", json={"quantity": 1000}, headers=_h(token)
+    ).status_code == 422
+
+
+def test_update_unknown_record_404(client):
+    token = _token(client)
+    resp = client.patch(
+        f"{API}/receiving/{_uuid.uuid4()}", json={"quantity": 3}, headers=_h(token)
+    )
+    assert resp.status_code == 404
+
+
+def test_update_requires_auth(client):
+    resp = client.patch(f"{API}/receiving/{_uuid.uuid4()}", json={"quantity": 3})
+    assert resp.status_code == 401
+
+
+# --- 취소(manager 전용) --------------------------------------------------------
+
+
+def test_cancel_requires_manager(client, engine):
+    """🔴 취소는 5년 보존 원장에서 재고를 빼는 일이고 복구 UI가 없다."""
+    staff = _token(client)
+    rec = _make_record(client, staff)
+    assert client.delete(f"{API}/receiving/{rec['id']}", headers=_h(staff)).status_code == 403
+    assert _stock(engine, rec["wine_vintage_id"]) == 12, "403인데 재고가 줄면 안 된다"
+
+
+def test_manager_can_cancel_and_stock_excludes_it(client, engine):
+    staff = _token(client)
+    rec = _make_record(client, staff)
+    mgr = _manager_token(client, engine)
+
+    resp = client.delete(f"{API}/receiving/{rec['id']}", headers=_h(mgr))
+    assert resp.status_code == 200
+    assert _stock(engine, rec["wine_vintage_id"]) == 0
+
+
+def test_cancel_is_soft_delete_not_hard(client, engine):
+    """행은 남아야 한다(AR6, 5년 보존)."""
+    from app.models.receiving import ReceivingRecord
+
+    staff = _token(client)
+    rec = _make_record(client, staff)
+    mgr = _manager_token(client, engine)
+    client.delete(f"{API}/receiving/{rec['id']}", headers=_h(mgr))
+
+    with Session(engine) as s:
+        row = s.get(ReceivingRecord, _uuid.UUID(rec["id"]))
+    assert row is not None, "하드삭제되면 원장이 사라진다"
+    assert row.deleted_at is not None
+
+
+def test_cancelled_record_cannot_be_edited(client, engine):
+    staff = _token(client)
+    rec = _make_record(client, staff)
+    mgr = _manager_token(client, engine)
+    client.delete(f"{API}/receiving/{rec['id']}", headers=_h(mgr))
+
+    resp = client.patch(
+        f"{API}/receiving/{rec['id']}", json={"quantity": 3}, headers=_h(staff)
+    )
+    assert resp.status_code == 404
+
+
+def test_cancelled_record_drops_out_of_history(client, engine):
+    staff = _token(client)
+    rec = _make_record(client, staff)
+    mgr = _manager_token(client, engine)
+    client.delete(f"{API}/receiving/{rec['id']}", headers=_h(mgr))
+
+    body = client.get(f"{API}/receiving", params={"period": "month"}, headers=_h(staff)).json()
+    assert all(item["id"] != rec["id"] for item in body["data"])
+
+
+def test_no_hard_delete_function_exists():
+    """AR6 — 하드삭제 경로를 아예 만들지 않는 것이 규칙을 지키는 방법이다."""
+    names = dir(receiving_crud)
+    assert not any("hard" in n or n == "delete_record" for n in names)

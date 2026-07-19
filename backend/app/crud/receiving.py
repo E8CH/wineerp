@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import desc, func
 from sqlmodel import Session, select
 
+from app.models.amendment import ReceivingAmendment
 from app.models.receiving import ReceivingRecord, ReceivingSource
 from app.models.user import User
 from app.models.wine import WineProduct, WineVintage
@@ -109,5 +110,66 @@ def list_records(
             .where(ReceivingRecord.received_at >= start)
             .where(ReceivingRecord.received_at < end)
             .order_by(desc(ReceivingRecord.received_at), ReceivingRecord.id)
+        ).all()
+    )
+
+
+def get_record(session: Session, record_id: uuid.UUID) -> ReceivingRecord | None:
+    """활성 레코드만. 이미 취소(soft-delete)된 것은 수정 대상이 아니다."""
+    rec = session.get(ReceivingRecord, record_id)
+    if rec is None or rec.deleted_at is not None:
+        return None
+    return rec
+
+
+def update_quantity(
+    session: Session,
+    record: ReceivingRecord,
+    *,
+    quantity: int,
+    changed_by: uuid.UUID,
+    reason: str | None = None,
+) -> ReceivingRecord:
+    """수량 수정 + 이력 기록을 **한 트랜잭션**에서.
+
+    이력 없이 수량만 덮어쓰면 무엇이 얼마에서 얼마로 바뀌었는지 사라진다.
+    변경이 없으면 이력 행을 만들지 않는다 — 잡음을 남기지 않는다.
+    """
+    if quantity == record.quantity:
+        return record
+
+    session.add(
+        ReceivingAmendment(
+            receiving_record_id=record.id,
+            before_quantity=record.quantity,
+            after_quantity=quantity,
+            changed_by=changed_by,
+            reason=reason,
+        )
+    )
+    record.quantity = quantity
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
+
+
+def soft_delete(session: Session, record: ReceivingRecord) -> ReceivingRecord:
+    """취소는 `deleted_at`만 채운다. 하드삭제 함수는 만들지 않는다(AR6, 5년 보존)."""
+    record.deleted_at = datetime.now(UTC)
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
+
+
+def list_amendments(
+    session: Session, record_id: uuid.UUID
+) -> list[ReceivingAmendment]:
+    return list(
+        session.exec(
+            select(ReceivingAmendment)
+            .where(ReceivingAmendment.receiving_record_id == record_id)
+            .order_by(ReceivingAmendment.changed_at)
         ).all()
     )
