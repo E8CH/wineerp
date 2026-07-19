@@ -23,10 +23,22 @@ from app.services.ports import InferenceResult, LabelInferencePort
 
 logger = logging.getLogger(__name__)
 
+# ⚠️ 실호출 검증(2026-07-19)으로 다듬은 프롬프트.
+# 초안은 "생산자명과 제품명이 다르면 제품명을 우선"이라고만 했는데, 보르도 라벨은
+# 샤토명이 곧 제품명이라 OpenAI가 "Grand Vin de Bordeaux"(등급 문구)를 골랐다.
+# 무엇을 **버려야 하는지**를 명시하는 편이 무엇을 고르라고 하는 것보다 잘 듣는다.
 _PROMPT = (
-    "이 와인 라벨 사진에서 와인의 모델명(제품명)을 추출하세요. "
-    "생산자명과 제품명이 다르면 제품명을 우선합니다. "
-    'JSON만 출력하세요: {"model_name": "...", "confidence": 0.0~1.0}'
+    "이 와인 라벨 사진에서 병을 특정하는 이름을 추출하세요.\n"
+    "- 보르도 샤토처럼 생산자명이 곧 제품명이면 그 이름을 그대로 씁니다"
+    " (예: Château Margaux).\n"
+    "- 생산자와 별도의 퀴베·제품명이 있으면 그 이름을 씁니다"
+    " (예: Penfolds Grange → Grange).\n"
+    "- 다음은 이름이 아니므로 제외하세요: 등급·품질 문구"
+    "(Grand Vin, Grand Cru, Reserva, Appellation … Contrôlée),"
+    " 병입 문구(Mis en bouteille …), 용량·도수, 수입사·판매원 표기, 연도.\n"
+    "- 라벨에서 이름을 읽을 수 없으면 model_name을 null로 두세요. 추측하지 마세요.\n"
+    "- confidence는 글자가 선명하고 이름이 분명할 때만 0.8 이상을 주세요.\n"
+    'JSON만 출력: {"model_name": "..." 또는 null, "confidence": 0.0~1.0}'
 )
 
 
