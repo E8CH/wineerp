@@ -67,7 +67,7 @@ development_status:
   epic-3: in-progress
   3-1-labelinferenceport-벤더-어댑터: review
   3-2-신규-와인-등록: review
-  3-3-초기-재고-세팅-모드: backlog
+  3-3-초기-재고-세팅-모드: review
   epic-3-retrospective: optional
 
   # Epic 4 — 입고 내역 & 수정

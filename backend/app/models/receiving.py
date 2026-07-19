@@ -11,9 +11,22 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from sqlalchemy import Column, DateTime
 from sqlmodel import Field, SQLModel
+
+
+class ReceivingSource(StrEnum):
+    """입고 이벤트인지 초기 세팅의 재고 기준선인지(Story 3.3).
+
+    별도 테이블로 나누지 않은 이유: 재고를 세는 곳은 `get_stock_map` 한 곳이어야 한다.
+    소스를 나누면 재고·리포트·엑셀 쿼리가 전부 union을 해야 하고, 하나만 빠뜨려도
+    재고가 조용히 틀린다.
+    """
+
+    receiving = "receiving"
+    initial_setup = "initial_setup"
 
 
 def _utcnow() -> datetime:
@@ -44,6 +57,9 @@ class ReceivingRecord(SQLModel, table=True):
     )
     staff_id: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)
     memo: str | None = None  # FR12 — 입력 UI는 Story 4.3
+    source: ReceivingSource = Field(
+        default=ReceivingSource.receiving, index=True, nullable=False
+    )
     # 재시도 중복 방지(Story 2.7). nullable — 키 없는 호출(스크립트·배치)을 막지 않는다.
     # PostgreSQL·SQLite 모두 unique 인덱스에서 NULL끼리는 충돌하지 않는다.
     idempotency_key: uuid.UUID | None = Field(default=None, unique=True, index=True)

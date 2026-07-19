@@ -6,7 +6,7 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
-from sqlmodel import Session, SQLModel, create_engine
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.core.db import get_session
 from app.main import app
@@ -131,3 +131,80 @@ def test_unknown_field_is_rejected(client):
 def test_create_requires_auth(client):
     resp = client.post(f"{API}/wines", json={"producer": "A", "model_name": "B"})
     assert resp.status_code == 401
+
+
+# --- Story 3.3: 초기 세팅 기준 재고 ------------------------------------------
+
+
+def test_source_defaults_to_receiving(client, engine):
+    """일반 입고는 source를 명시하지 않아도 receiving이어야 한다."""
+    from app.models.receiving import ReceivingSource
+
+    token = _token(client)
+    created = _create(client, token, vintage=2020).json()
+    client.post(
+        f"{API}/receiving",
+        json={"wine_vintage_id": created["vintage_id"], "quantity": 2},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    with Session(engine) as s:
+        from app.models.receiving import ReceivingRecord
+
+        rec = s.exec(select(ReceivingRecord)).first()
+    assert rec.source == ReceivingSource.receiving
+
+
+def test_initial_quantity_creates_baseline_atomically(client, engine):
+    """마스터와 기준 재고가 한 요청에서 함께 생긴다.
+
+    두 번 호출하게 하면 사이에서 실패했을 때 수량 없는 마스터가 남는다.
+    """
+    from app.models.receiving import ReceivingRecord, ReceivingSource
+
+    token = _token(client)
+    body = _create(client, token, vintage=2015, initial_quantity=7).json()
+    assert body["receiving_record_id"] is not None
+
+    with Session(engine) as s:
+        rec = s.exec(select(ReceivingRecord)).one()
+        assert rec.quantity == 7
+        assert rec.source == ReceivingSource.initial_setup
+
+
+def test_baseline_counts_toward_stock_but_stays_distinguishable(client, engine):
+    """재고에는 포함되고(집계는 한 곳), source로는 구분된다."""
+    import uuid as _uuid
+
+    from app.crud import receiving as receiving_crud
+    from app.models.receiving import ReceivingRecord, ReceivingSource
+
+    token = _token(client)
+    created = _create(client, token, vintage=2015, initial_quantity=10).json()
+    vid = _uuid.UUID(created["vintage_id"])
+    client.post(
+        f"{API}/receiving",
+        json={"wine_vintage_id": str(vid), "quantity": 3},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    with Session(engine) as s:
+        assert receiving_crud.get_stock_map(s, [vid])[vid] == 13
+        rows = s.exec(select(ReceivingRecord)).all()
+        by_source = {r.source: r.quantity for r in rows}
+    assert by_source[ReceivingSource.initial_setup] == 10
+    assert by_source[ReceivingSource.receiving] == 3
+
+
+def test_no_initial_quantity_creates_no_record(client, engine):
+    """마스터만 등록하고 싶은 경우를 막지 않는다 — 수량은 선택이다."""
+    from app.models.receiving import ReceivingRecord
+
+    token = _token(client)
+    body = _create(client, token, vintage=2015).json()
+    assert body["receiving_record_id"] is None
+    with Session(engine) as s:
+        assert s.exec(select(ReceivingRecord)).all() == []
+
+
+def test_initial_quantity_zero_is_rejected(client):
+    assert _create(client, _token(client), initial_quantity=0).status_code == 422

@@ -35,6 +35,7 @@ class RegistrationState {
     this.phase = InferencePhase.idle,
     this.submitting = false,
     this.error,
+    this.initialQuantity,
   });
 
   /// 업로드된 라벨 사진 key. 없으면 등록도 추론도 불가(AC2).
@@ -54,6 +55,10 @@ class RegistrationState {
   final InferencePhase phase;
   final bool submitting;
   final String? error;
+
+  /// 초기 세팅에서만 쓰는 보유 수량(선택). null이면 마스터만 등록한다 —
+  /// "마스터만 빨리 등록하고 싶다"를 막지 않기 위해 강제하지 않는다.
+  final int? initialQuantity;
 
   bool get hasPhoto => imageKey != null;
   bool get isInferring => phase == InferencePhase.inferring;
@@ -78,6 +83,8 @@ class RegistrationState {
     bool? submitting,
     String? error,
     bool clearError = false,
+    int? initialQuantity,
+    bool clearInitialQuantity = false,
   }) =>
       RegistrationState(
         imageKey: imageKey ?? this.imageKey,
@@ -90,6 +97,9 @@ class RegistrationState {
         phase: phase ?? this.phase,
         submitting: submitting ?? this.submitting,
         error: clearError ? null : (error ?? this.error),
+        initialQuantity: clearInitialQuantity
+            ? null
+            : (initialQuantity ?? this.initialQuantity),
       );
 }
 
@@ -152,6 +162,10 @@ class RegistrationController extends Notifier<RegistrationState> {
 
   void setNv(bool nv) => state = state.copyWith(isNv: nv);
 
+  void setInitialQuantity(int? q) => state = q == null
+      ? state.copyWith(clearInitialQuantity: true)
+      : state.copyWith(initialQuantity: q);
+
   /// 추론을 건너뛰고 즉시 수동 입력으로. 대기 중에도 눌린다(폴백 상시 노출).
   void useManualInput() =>
       state = state.copyWith(phase: InferencePhase.idle, clearError: true);
@@ -169,6 +183,10 @@ class RegistrationController extends Notifier<RegistrationState> {
             vintage: state.vintageToSubmit,
             barcode: barcode,
             representativeImageKey: state.imageKey,
+            // 초기 세팅에서만 채워진다. 마스터와 기준 재고를 한 요청으로 만드는
+            // 이유는 원자성이다 — 두 번 부르면 사이에서 실패했을 때 수량 없는
+            // 마스터가 남고 작업자는 알 수 없다.
+            initialQuantity: state.initialQuantity,
           );
       // ⚠️ 성공 경로에서도 반드시 내린다. 호출자가 reset()을 부를 것이라고 가정하면,
       // 부르지 않는 호출자에게는 영원히 도는 스피너와 잠긴 폼이 남는다.

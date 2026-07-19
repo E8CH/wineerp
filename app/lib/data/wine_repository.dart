@@ -22,6 +22,7 @@ class WineRepository {
     int? vintage, // null = NV (인식 실패가 아니라 유효 상태)
     String? barcode,
     String? representativeImageKey,
+    int? initialQuantity,
   }) async {
     final resp = await _dio.post<Map<String, dynamic>>(
       '/wines',
@@ -31,6 +32,7 @@ class WineRepository {
         'vintage': vintage,
         'barcode': ?barcode,
         'representative_image_key': ?representativeImageKey,
+        'initial_quantity': ?initialQuantity,
       },
     );
     final data = resp.data!;

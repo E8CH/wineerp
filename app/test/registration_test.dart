@@ -39,6 +39,7 @@ class _FakeWineRepo extends WineRepository {
     int? vintage,
     String? barcode,
     String? representativeImageKey,
+    int? initialQuantity,
   }) async {
     lastCall = {
       'producer': producer,
@@ -46,6 +47,7 @@ class _FakeWineRepo extends WineRepository {
       'vintage': vintage,
       'barcode': barcode,
       'imageKey': representativeImageKey,
+      'initialQuantity': initialQuantity,
     };
     return const WineCreated(productId: 'p1', vintageId: 'v1');
   }

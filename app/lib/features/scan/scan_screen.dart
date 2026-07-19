@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/theme.dart';
 import '../../data/scan_models.dart';
 import '../../data/scan_repository.dart';
 import '../receiving/receiving_controller.dart';
 import '../registration/registration_controller.dart';
 import '../registration/registration_panel.dart';
+import '../registration/setup_mode_controller.dart';
+import '../registration/widgets/setup_mode_banner.dart';
 import '../receiving/widgets/candidate_list.dart';
 import '../receiving/widgets/receiving_panel.dart';
 import 'scan_controller.dart';
@@ -48,37 +51,78 @@ class ScanScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final cameraEnabled = ref.watch(cameraEnabledProvider);
     final match = ref.watch(matchProvider);
+    final setup = ref.watch(setupModeProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('스캔')),
-      body: Stack(
+      appBar: AppBar(
+        title: Text(setup.active ? '초기 세팅' : '스캔'),
+        actions: [
+          if (!setup.active)
+            IconButton(
+              key: const Key('enter_setup_mode'),
+              tooltip: '초기 세팅 모드',
+              icon: const Icon(Icons.inventory_2_outlined),
+              onPressed: () {
+                ref.read(setupModeProvider.notifier).enter();
+                _clearScanState(ref);
+              },
+            ),
+        ],
+      ),
+      body: Column(
         children: [
-          if (cameraEnabled)
-            ScannerOverlay(onNewCode: (code) => _match(ref, code))
-          else
-            const _CameraPlaceholder(),
-          // ⚠️ 높이를 제한하고 스크롤을 준다. `Positioned(left/right/bottom)`만 주면
-          // maxHeight가 무한이라, 큰 글꼴(200%)에서 패널이 Stack 위로 자라 조용히
-          // 잘린다 — 오버플로 경고도 없이 "어떤 와인인지" 보여주는 카드만 사라지고
-          // [완료]는 그대로 눌린다. 확인 단계에서 최악의 실패 모양이다.
-          Positioned(
-            left: 12,
-            right: 12,
-            bottom: 12,
-            top: 12,
-            child: SafeArea(
-              child: Align(
-                alignment: Alignment.bottomCenter,
-                child: SingleChildScrollView(
-                  reverse: true, // 넘칠 때 하단 액션이 먼저 보이도록
-                  child: _MatchResult(match: match),
+          if (setup.active)
+            SetupModeBanner(
+              registeredCount: setup.registeredCount,
+              onExit: () {
+                ref.read(setupModeProvider.notifier).exit();
+                _clearScanState(ref);
+              },
+            ),
+          Expanded(
+            child: Stack(
+              children: [
+                if (cameraEnabled)
+                  ScannerOverlay(onNewCode: (code) => _match(ref, code))
+                else
+                  const _CameraPlaceholder(),
+                // ⚠️ 높이를 제한하고 스크롤을 준다. `Positioned(left/right/bottom)`만 주면
+                // maxHeight가 무한이라, 큰 글꼴(200%)에서 패널이 Stack 위로 자라 조용히
+                // 잘린다 — 오버플로 경고도 없이 "어떤 와인인지" 보여주는 카드만 사라지고
+                // [완료]는 그대로 눌린다. 확인 단계에서 최악의 실패 모양이다.
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  top: 12,
+                  child: SafeArea(
+                    child: Align(
+                      alignment: Alignment.bottomCenter,
+                      child: SingleChildScrollView(
+                        reverse: true, // 넘칠 때 하단 액션이 먼저 보이도록
+                        child: _MatchResult(match: match),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// 모드 전환 시 진행 중이던 스캔·선택·등록을 모두 버린다 — 모드가 다르면
+  /// 화면도 달라야 하고, 넘어온 상태가 반대 모드에서 오작동하면 안 된다.
+  static void _clearScanState(WidgetRef ref) {
+    ref.read(matchProvider.notifier).state = const AsyncData(null);
+    ref.read(selectedCandidateProvider.notifier).state = null;
+    ref.read(registeredCandidateProvider.notifier).state = null;
+    ref.read(registeringProvider.notifier).state = false;
+    ref.read(registrationControllerProvider.notifier).reset();
+    ref.read(scanControllerProvider.notifier).reset();
+    ref.invalidate(receivingControllerProvider);
   }
 }
 
@@ -107,13 +151,39 @@ class _MatchResult extends ConsumerWidget {
         ),
       ),
       data: (result) {
+        final setupActive = ref.watch(setupModeProvider).active;
+
         // 방금 등록한 와인이 있으면 그대로 수량 입력으로 이어간다(AC6).
+        // 단 초기 세팅에서는 입고를 만들지 않는다 — 등록 자체가 목적이다.
         final registered = ref.watch(registeredCandidateProvider);
-        if (registered != null) {
+        if (registered != null && !setupActive) {
           return _ConfirmFor(candidate: registered, canReselect: false);
         }
         if (result == null) return const SizedBox.shrink();
         final candidates = result.candidates;
+
+        if (setupActive) {
+          // ⚠️ 세팅 중에는 매칭돼도 입고 카드를 띄우지 않는다.
+          // 창고를 돌며 이미 등록된 병을 스캔하는 일은 흔하고, 그때 [완료]가 보이면
+          // 실제로 들어온 것이 없는데 입고 기록이 생겨 재고가 이중 계상된다.
+          if (candidates.isNotEmpty) {
+            return _AlreadyRegisteredCard(candidate: candidates.first);
+          }
+          // 미매칭이면 버튼을 한 번 더 누르게 하지 않는다 — 연속 등록 리듬.
+          return RegistrationPanel(
+            key: ValueKey('setup-${result.code}'),
+            barcode: result.code,
+            setupMode: true,
+            onRegistered: (_) {
+              ref.read(setupModeProvider.notifier).countRegistration();
+              ref.read(registrationControllerProvider.notifier).reset();
+              // 다음 병으로. 같은 바코드도 다시 스캔될 수 있어야 한다.
+              ref.read(matchProvider.notifier).state = const AsyncData(null);
+              ref.read(scanControllerProvider.notifier).reset();
+            },
+          );
+        }
+
         if (candidates.isEmpty) return _UnregisteredCard(code: result.code);
 
         // 후보가 하나뿐이면 고를 것이 없으므로 확인 카드로 직행한다.
@@ -137,10 +207,8 @@ class _MatchResult extends ConsumerWidget {
             selectedId: selectedId,
             onSelect: (c) =>
                 ref.read(selectedCandidateProvider.notifier).state = c.id,
-            onNotListed: () =>
-                ref.read(matchProvider.notifier).state = AsyncData(
-              ScanResult(code: result.code, products: const []),
-            ),
+            onNotListed: () => ref.read(matchProvider.notifier).state =
+                AsyncData(ScanResult(code: result.code, products: const [])),
           );
         }
 
@@ -151,6 +219,27 @@ class _MatchResult extends ConsumerWidget {
 }
 
 /// 미매칭 → 신규 등록 유도. 등록을 시작하면 같은 자리에 등록 패널이 뜬다(FR6).
+/// 세팅 모드에서 이미 등록된 와인을 스캔했을 때. 입고 액션을 제공하지 않는다.
+class _AlreadyRegisteredCard extends StatelessWidget {
+  const _AlreadyRegisteredCard({required this.candidate});
+
+  final VintageCandidate candidate;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: ListTile(
+        leading: const Icon(Icons.check_circle, color: AppColors.success),
+        title: const Text('이미 등록된 와인'),
+        subtitle: Text(
+          '${candidate.product.modelName} · ${candidate.vintageLabel}'
+          ' · 현재고 ${candidate.stock}',
+        ),
+      ),
+    );
+  }
+}
+
 class _UnregisteredCard extends ConsumerWidget {
   const _UnregisteredCard({this.code});
 
@@ -169,7 +258,9 @@ class _UnregisteredCard extends ConsumerWidget {
         onRegistered: (vintageId) {
           // 등록 직후 같은 흐름으로 수량 입력·완료까지 이어진다(AC6).
           final reg = ref.read(registrationControllerProvider);
-          ref.read(registeredCandidateProvider.notifier).state = VintageCandidate(
+          ref
+              .read(registeredCandidateProvider.notifier)
+              .state = VintageCandidate(
             product: WineProductRead(
               id: 'new',
               producer: reg.producer.trim(),

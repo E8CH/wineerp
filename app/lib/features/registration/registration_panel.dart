@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
@@ -15,7 +16,11 @@ class RegistrationPanel extends ConsumerStatefulWidget {
     required this.onRegistered,
     this.barcode,
     this.onCancel,
+    this.setupMode = false,
   });
+
+  /// 초기 세팅 모드 여부. 보유 수량 필드와 골드 CTA("등록하고 다음 병")를 켠다.
+  final bool setupMode;
 
   /// 스캔에서 넘어온 코드. 있으면 등록 시 연결해 다음부터 바로 매칭된다.
   final String? barcode;
@@ -30,12 +35,14 @@ class _RegistrationPanelState extends ConsumerState<RegistrationPanel> {
   final _model = TextEditingController();
   final _producer = TextEditingController();
   final _vintage = TextEditingController();
+  final _quantity = TextEditingController();
 
   @override
   void dispose() {
     _model.dispose();
     _producer.dispose();
     _vintage.dispose();
+    _quantity.dispose();
     super.dispose();
   }
 
@@ -70,7 +77,7 @@ class _RegistrationPanelState extends ConsumerState<RegistrationPanel> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    '새 와인 등록',
+                    widget.setupMode ? '보유 와인 등록' : '새 와인 등록',
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
@@ -134,6 +141,23 @@ class _RegistrationPanelState extends ConsumerState<RegistrationPanel> {
                 onNvChanged: ctrl.setNv,
                 onVintageChanged: ctrl.setVintage,
               ),
+              if (widget.setupMode) ...[
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('initial_quantity_field'),
+                  controller: _quantity,
+                  keyboardType: TextInputType.number,
+                  maxLength: 3,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  onChanged: (v) => ctrl.setInitialQuantity(int.tryParse(v)),
+                  decoration: const InputDecoration(
+                    labelText: '보유 수량 (선택)',
+                    helperText: '비워두면 마스터만 등록합니다',
+                    border: OutlineInputBorder(),
+                    counterText: '',
+                  ),
+                ),
+              ],
               if (state.error != null) _ErrorRow(message: state.error!),
               const SizedBox(height: 8),
               SizedBox(
@@ -151,7 +175,17 @@ class _RegistrationPanelState extends ConsumerState<RegistrationPanel> {
                           ),
                         )
                       : const Icon(Icons.check),
-                  label: Text(state.submitting ? '등록 중…' : '등록하고 계속'),
+                  label: Text(
+                    state.submitting
+                        ? '등록 중…'
+                        : (widget.setupMode ? '등록하고 다음 병' : '등록하고 계속'),
+                  ),
+                  // 초기 세팅 Primary는 골드 — 입고 모드와 색으로 구분한다(UX 사양).
+                  style: widget.setupMode
+                      ? FilledButton.styleFrom(
+                          backgroundColor: AppColors.categoryStock,
+                        )
+                      : null,
                 ),
               ),
             ],

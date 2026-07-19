@@ -11,7 +11,7 @@ from collections.abc import Iterable
 from sqlalchemy import func
 from sqlmodel import Session, select
 
-from app.models.receiving import ReceivingRecord
+from app.models.receiving import ReceivingRecord, ReceivingSource
 
 # SQLite의 바인드 파라미터 상한(32,766)이 더 낮으므로 그쪽에 맞춘다.
 _MAX_BIND_PARAMS = 30_000
@@ -35,6 +35,7 @@ def create_record(
     staff_id: uuid.UUID,
     memo: str | None = None,
     idempotency_key: uuid.UUID | None = None,
+    source: ReceivingSource = ReceivingSource.receiving,
 ) -> ReceivingRecord:
     """입고 1건 생성. `received_at`은 모델 기본값(서버 UTC)이 채운다 — 인자로 받지 않는다."""
     record = ReceivingRecord(
@@ -43,6 +44,7 @@ def create_record(
         staff_id=staff_id,
         memo=memo,
         idempotency_key=idempotency_key,
+        source=source,
     )
     session.add(record)
     session.commit()

@@ -8,7 +8,9 @@ from __future__ import annotations
 from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUser, SessionDep
+from app.crud import receiving as receiving_crud
 from app.crud import wine as wine_crud
+from app.models.receiving import ReceivingSource
 from app.schemas.wine import WineCreate, WineCreated
 
 router = APIRouter(prefix="/wines", tags=["wines"])
@@ -18,7 +20,7 @@ router = APIRouter(prefix="/wines", tags=["wines"])
 def create_wine(
     payload: WineCreate,
     session: SessionDep,
-    _: CurrentUser,
+    current_user: CurrentUser,
 ) -> WineCreated:
     product = wine_crud.create_product(
         session=session,
@@ -39,4 +41,22 @@ def create_wine(
         wine_crud.link_barcode_to_product(
             session, barcode_id=barcode.id, wine_product_id=product.id
         )
-    return WineCreated(product_id=product.id, vintage_id=vintage.id)
+
+    record_id = None
+    if payload.initial_quantity is not None:
+        # 초기 세팅의 재고 기준선(FR13). `source`로 입고 이벤트와 구분되지만
+        # 같은 테이블에 있어 재고 집계는 여전히 한 곳에서만 일어난다.
+        record = receiving_crud.create_record(
+            session,
+            wine_vintage_id=vintage.id,
+            quantity=payload.initial_quantity,
+            staff_id=current_user.id,
+            source=ReceivingSource.initial_setup,
+        )
+        record_id = record.id
+
+    return WineCreated(
+        product_id=product.id,
+        vintage_id=vintage.id,
+        receiving_record_id=record_id,
+    )
