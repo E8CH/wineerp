@@ -8,13 +8,47 @@
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Protocol
+
+# 이 값 미만이면 UI가 "저신뢰" 경고를 띄우고 수동 입력을 권한다(UX-DR8, SM-C2).
+# ⚠️ 이 숫자를 정확도 KPI로 삼지 말 것 — 라벨 빈티지 인식 정확도의 공개 벤치마크는
+# 존재하지 않으며, 유통되는 수치는 전부 원출처 검증에 실패했다(리서치 2026-07-17).
+LOW_CONFIDENCE_THRESHOLD = 0.6
+
+
+@dataclass(frozen=True)
+class InferenceResult:
+    """추론 결과 — 실패/저신뢰를 **예외가 아니라 값으로** 반환한다.
+
+    어댑터가 예외를 던지면 라우트마다 try/except가 번지고 하나만 빠뜨려도 500이 난다.
+    값으로 두면 수동 입력 폴백(FR6) 분기가 타입에 드러난다.
+    """
+
+    model_name: str | None = None
+    confidence: float = 0.0
+    failed: bool = False
+    reason: str | None = None
+
+    @property
+    def is_low_confidence(self) -> bool:
+        return not self.failed and self.confidence < LOW_CONFIDENCE_THRESHOLD
+
+    @property
+    def needs_manual_input(self) -> bool:
+        """실패했거나 모델명이 비었으면 UI는 즉시 수동 입력으로 폴백해야 한다."""
+        return self.failed or not self.model_name
 
 
 class LabelInferencePort(Protocol):
-    """라벨 이미지 → 모델명 초안 추론. 페이로드는 라벨 이미지만(PII·매입가 배제)."""
+    """라벨 이미지 → 모델명 초안 추론.
 
-    def infer_model_name(self, image_key: str) -> InferenceResult: ...
+    ⚠️ **바이트만 받는다.** `image_key`나 도메인 객체를 받지 않는 것은 편의 문제가 아니라
+    구조적 보장이다 — 거래처 PII·매입가가 LLM 페이로드에 들어갈 수 있는 경로를 타입으로
+    없앤다(AR9). 스토리지 접근은 라우트가 하고, 어댑터는 스토리지를 모른다.
+    """
+
+    def infer(self, image: bytes, content_type: str) -> InferenceResult: ...
 
 
 class WineCatalogPort(Protocol):
@@ -28,11 +62,4 @@ class StoragePort(Protocol):
 
     def put_object(self, data: bytes, key: str, content_type: str) -> str: ...
 
-
-class InferenceResult:
-    """추론 결과 — 실패/저신뢰를 도메인 값으로 반환해 UI가 수동 폴백(FR-6)으로 분기하게 한다."""
-
-    def __init__(self, model_name: str | None, confidence: float, failed: bool = False) -> None:
-        self.model_name = model_name
-        self.confidence = confidence
-        self.failed = failed
+    def get_object(self, key: str) -> bytes: ...

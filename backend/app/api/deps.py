@@ -8,18 +8,21 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session
 
+from app.adapters.label_inference import get_label_inference
 from app.adapters.storage import get_storage
 from app.core.config import settings
 from app.core.db import get_session
 from app.core.security import decode_token
 from app.models.user import User, UserRole
-from app.services.ports import StoragePort
+from app.services.ports import LabelInferencePort, StoragePort
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/login")
 
 SessionDep = Annotated[Session, Depends(get_session)]
 TokenDep = Annotated[str, Depends(oauth2_scheme)]
 StorageDep = Annotated[StoragePort, Depends(get_storage)]
+# 라우트는 팩토리만 안다 — 어댑터 구현을 직접 import하지 않는다(AR4).
+LabelInferenceDep = Annotated[LabelInferencePort, Depends(get_label_inference)]
 
 _CREDENTIALS_EXC = HTTPException(
     status_code=status.HTTP_401_UNAUTHORIZED,

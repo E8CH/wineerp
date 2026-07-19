@@ -13,3 +13,9 @@ class LocalStorageAdapter:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
         return f"local:///{key}"
+
+    def get_object(self, key: str) -> bytes:
+        path = self.base_dir / key
+        if not path.is_file():
+            raise FileNotFoundError(key)
+        return path.read_bytes()

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.routes import auth, health, images, receiving, scan
+from app.api.routes import auth, health, images, inference, receiving, scan
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -11,6 +11,7 @@ api_router.include_router(auth.router)
 api_router.include_router(images.router)
 api_router.include_router(scan.router)
 api_router.include_router(receiving.router)
+api_router.include_router(inference.router)
 
 # 후속 스토리 등록 예정:
-#   wines/registration (3.x) · receiving 조회·수정 (4.x) · reports (5.x)
+#   wines/registration (3.2) · receiving 조회·수정 (4.x) · reports (5.x)

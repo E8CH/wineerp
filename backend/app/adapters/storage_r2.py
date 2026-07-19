@@ -25,3 +25,10 @@ class R2StorageAdapter:
             Bucket=self._bucket, Key=key, Body=data, ContentType=content_type
         )
         return f"r2:///{self._bucket}/{key}"
+
+    def get_object(self, key: str) -> bytes:
+        try:
+            resp = self._client.get_object(Bucket=self._bucket, Key=key)
+        except self._client.exceptions.NoSuchKey as exc:
+            raise FileNotFoundError(key) from exc
+        return resp["Body"].read()

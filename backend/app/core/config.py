@@ -44,7 +44,12 @@ class Settings(BaseSettings):
         return normalize_db_url(v)
 
     # --- LLM 제공자 (Story 3.1에서 실사용, 유료 티어 필수) ---
-    LLM_PROVIDER: str = "gemini"  # gemini | openai
+    # 🔴 기본값을 fake로 둔다 — 설정이 비어 있을 때 실벤더로 새면 안 된다(Story 3.1).
+    LLM_PROVIDER: str = "fake"  # fake | gemini | openai
+    # 실벤더는 이 값이 true가 아니면 생성 자체를 거부한다. 키로는 티어를 알 수 없으므로,
+    # 운영자가 Billing 활성화를 명시적으로 단언하게 만드는 것이 유일한 방어선이다.
+    LLM_PAID_TIER_CONFIRMED: bool = False
+    LLM_TIMEOUT_SECONDS: int = 8  # 현장 흐름(NFR5 3~5초 목표)을 멈추지 않게
     GEMINI_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
 
