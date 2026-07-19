@@ -31,11 +31,18 @@ class CandidateList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 고정 320dp는 글꼴 200%에서 2행 남짓만 보여주고, 탈출구("찾는 빈티지가 없어요")가
+    // 마지막 항목이라 화면 밖으로 밀린다. 그 탈출구가 없으면 직원은 가장 가까운 틀린
+    // 빈티지를 고른다 — 목록의 존재 이유가 무너지므로 배율에 따라 늘린다.
+    final scale = MediaQuery.textScalerOf(context).scale(16) / 16;
+    final available = MediaQuery.sizeOf(context).height * 0.7;
+    final cap = (maxHeight * scale).clamp(maxHeight, available);
+
     return Card(
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxHeight: maxHeight),
+        constraints: BoxConstraints(maxHeight: cap),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -169,7 +176,12 @@ class _CandidateRow extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  _VintageBadge(label: label, muted: !candidate.isSelectable),
+                  Flexible(
+                    child: _VintageBadge(
+                      label: label,
+                      muted: !candidate.isSelectable,
+                    ),
+                  ),
                   if (selected) const _SelectedMark(),
                   const SizedBox(width: 10),
                 ],
@@ -216,9 +228,14 @@ class _VintageBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // 280dp + 글꼴 200%에서는 고정 폭 자식들만으로 가용 폭을 넘긴다.
+    // 배지가 줄지 않으면 RenderFlex 오버플로가 난다.
     return Center(
       child: Text(
         label,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        textAlign: TextAlign.end,
         style: (muted ? theme.textTheme.bodyMedium : theme.textTheme.titleLarge)
             ?.copyWith(color: muted ? AppColors.muted : AppColors.onSurface),
       ),

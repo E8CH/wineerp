@@ -24,9 +24,19 @@ class ScanScreen extends ConsumerWidget {
     ref.invalidate(receivingControllerProvider);
     try {
       final result = await ref.read(scanRepositoryProvider).scan(code);
-      ref.read(matchProvider.notifier).state = AsyncData(result);
+      _set(ref, AsyncData(result));
     } catch (e, st) {
-      ref.read(matchProvider.notifier).state = AsyncError(e, st);
+      _set(ref, AsyncError(e, st));
+    }
+  }
+
+  /// 위젯이 이미 dispose된 뒤(로그아웃 등)에는 `ref`가 StateError를 던진다.
+  /// catch 블록에서 그대로 쓰면 그 StateError가 uncaught로 새어나간다.
+  static void _set(WidgetRef ref, AsyncValue<ScanResult?> value) {
+    try {
+      ref.read(matchProvider.notifier).state = value;
+    } on StateError {
+      // 화면이 사라진 뒤 도착한 응답 — 버릴 수 있다.
     }
   }
 

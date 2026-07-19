@@ -9,11 +9,22 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, SQLModel
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def _tz_column() -> Column:
+    """`_utcnow()`가 aware datetime을 주므로 컬럼도 timestamptz여야 한다.
+
+    SQLModel 기본 `datetime`은 TIMESTAMP WITHOUT TIME ZONE으로 생성되어 마이그레이션
+    (0001·0002, timezone=True)과 어긋난다. 어긋난 채 두면 `alembic revision --autogenerate`가
+    매번 허위 타입 변경 diff를 낸다.
+    """
+    return Column(DateTime(timezone=True), nullable=False)
 
 
 class WineProduct(SQLModel, table=True):
@@ -26,7 +37,7 @@ class WineProduct(SQLModel, table=True):
     country: str | None = None
     grape: str | None = None
     lwin7: str | None = Field(default=None, index=True)  # 내부 표준키(와인)
-    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column=_tz_column())
 
 
 class WineVintage(SQLModel, table=True):
@@ -37,7 +48,7 @@ class WineVintage(SQLModel, table=True):
     vintage: int | None = None  # nullable — NV(Non-Vintage)는 1급 유효 상태
     lwin11: str | None = None  # 내부 표준키(+빈티지)
     representative_image_key: str | None = None  # R2 오브젝트 key (Story 2.3)
-    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column=_tz_column())
 
 
 class Barcode(SQLModel, table=True):
@@ -45,7 +56,7 @@ class Barcode(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     code: str = Field(unique=True, index=True, nullable=False)
-    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+    created_at: datetime = Field(default_factory=_utcnow, sa_column=_tz_column())
 
 
 class BarcodeWineProductLink(SQLModel, table=True):

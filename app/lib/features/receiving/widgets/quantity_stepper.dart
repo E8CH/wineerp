@@ -36,8 +36,11 @@ class QuantityStepper extends StatelessWidget {
           controller: controller,
           autofocus: true,
           keyboardType: TextInputType.number,
+          // 자릿수를 제한해 "20자리 입력 → tryParse null → 조용히 취소"와
+          // "5000 입력 → 말없이 999로 clamp"를 애초에 만들지 않는다.
+          maxLength: 3,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: const InputDecoration(suffixText: '병'),
+          decoration: InputDecoration(suffixText: '병', helperText: '$min~$max'),
         ),
         actions: [
           TextButton(

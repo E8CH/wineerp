@@ -11,8 +11,10 @@ include: package:flutter_lints/flutter.yaml
 
 analyzer:
   exclude:
-    # OpenAPI 생성 클라이언트(dart-dio) — 생성 코드는 분석/린트 대상에서 제외
-    - lib/data/api/**
+    # 생성 코드는 분석/린트 대상에서 제외.
+    # (dart-dio 생성 클라이언트 `lib/data/api/`는 제거됨 — 아무 데서도 쓰이지 않으면서
+    #  낡은 스펙 기준이라 "인증 불필요"로 잘못 문서화하고 있었다. 스펙은
+    #  `backend/scripts/gen_openapi.py`로 재생성하고, HTTP는 `lib/data/*_repository.dart`가 담당.)
     - "**/*.g.dart"
 
 linter:
