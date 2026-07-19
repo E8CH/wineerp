@@ -5,6 +5,7 @@ class WineVintageRead {
     this.vintage,
     this.lwin11,
     this.representativeImageKey,
+    this.stock = 0,
   });
 
   final String id;
@@ -12,11 +13,15 @@ class WineVintageRead {
   final String? lwin11;
   final String? representativeImageKey;
 
+  /// 현재고 = 입고 합계(서버 집계). 화면에서 다시 계산하지 말 것.
+  final int stock;
+
   factory WineVintageRead.fromJson(Map<String, dynamic> json) => WineVintageRead(
         id: json['id'] as String,
         vintage: json['vintage'] as int?,
         lwin11: json['lwin11'] as String?,
         representativeImageKey: json['representative_image_key'] as String?,
+        stock: (json['stock'] as int?) ?? 0,
       );
 }
 
@@ -69,6 +74,8 @@ class VintageCandidate {
   String get id => vintage?.id ?? 'product:${product.id}';
 
   int? get year => vintage?.vintage;
+
+  int get stock => vintage?.stock ?? 0;
 
   /// 빈티지 행이 있으면 연도 또는 NV, 없으면 미등록.
   /// NV(Non-Vintage)는 인식 실패가 아니라 1급 유효 상태다 — 오류로 표시하지 말 것.

@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme.dart';
 import 'category_bar.dart';
 
-/// 입고 확인 카드 (UX-DR5) — 병 사진 자리·모델명(22)·빈티지·좌측 CategoryBar.
-/// 현재고 배지는 receiving_records(Story 2.6)에서 연결.
+/// 입고 확인 카드 (UX-DR5) — 병 사진 자리·모델명(22)·빈티지·현재고 배지·좌측 CategoryBar.
 class ReceivingConfirmCard extends StatelessWidget {
   const ReceivingConfirmCard({
     super.key,
@@ -12,6 +11,7 @@ class ReceivingConfirmCard extends StatelessWidget {
     required this.producer,
     this.vintage,
     this.imageUrl,
+    this.stock,
     this.onConfirm,
   });
 
@@ -19,6 +19,10 @@ class ReceivingConfirmCard extends StatelessWidget {
   final String producer;
   final int? vintage;
   final String? imageUrl;
+
+  /// 현재고(서버 집계). null이면 배지를 숨긴다 — 0과 "모름"은 다르다.
+  final int? stock;
+
   final VoidCallback? onConfirm;
 
   @override
@@ -54,9 +58,27 @@ class ReceivingConfirmCard extends StatelessWidget {
                     Text(producer, style: theme.textTheme.bodyMedium),
                     Text(modelName, style: theme.textTheme.titleLarge),
                     const SizedBox(height: 4),
-                    Chip(
-                      label: Text('빈티지 $vintageLabel'),
-                      visualDensity: VisualDensity.compact,
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        Chip(
+                          label: Text('빈티지 $vintageLabel'),
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        if (stock != null)
+                          Chip(
+                            key: const Key('stock_badge'),
+                            avatar: const Icon(
+                              Icons.inventory_2_outlined,
+                              size: 16,
+                              color: AppColors.categoryStock,
+                            ),
+                            label: Text('현재고 $stock'),
+                            backgroundColor: AppColors.container,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                      ],
                     ),
                   ],
                 ),

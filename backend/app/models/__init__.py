@@ -4,6 +4,7 @@
 스키마는 필요 시점 스토리에서 추가:
   user (Story 1.2) · wine_product/wine_vintage/barcode (Story 2.1) · receiving_record (Story 2.6)
 """
+from app.models.receiving import ReceivingRecord
 from app.models.user import User, UserRole
 from app.models.wine import (
     Barcode,
@@ -19,4 +20,5 @@ __all__ = [
     "WineVintage",
     "Barcode",
     "BarcodeWineProductLink",
+    "ReceivingRecord",
 ]

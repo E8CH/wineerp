@@ -59,7 +59,7 @@ development_status:
   2-3-라벨-사진-촬영-저장: review
   2-4-매칭-확인-카드: review
   2-5-빈티지-후보-선택: review
-  2-6-수량-지정-입고-완료: backlog
+  2-6-수량-지정-입고-완료: review
   epic-2-retrospective: optional
 
   # Epic 3 — 신규 와인 등록 & 초기 세팅

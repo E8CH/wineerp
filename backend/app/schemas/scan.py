@@ -17,6 +17,7 @@ class WineVintageRead(BaseModel):
     vintage: int | None
     lwin11: str | None
     representative_image_key: str | None
+    stock: int = 0  # 현재고 (Story 2.6) — 입고 합계, soft-delete 제외
 
 
 class WineProductRead(BaseModel):

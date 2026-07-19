@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/scan_models.dart';
 import '../../data/scan_repository.dart';
 import '../receiving/widgets/candidate_list.dart';
-import '../receiving/widgets/receiving_confirm_card.dart';
+import '../receiving/widgets/receiving_panel.dart';
 import 'scan_controller.dart';
 import 'widgets/scanner_overlay.dart';
 
@@ -124,7 +124,7 @@ class _UnregisteredCard extends StatelessWidget {
   }
 }
 
-/// 확정된 후보의 확인 카드. 오선택 시 즉시 목록으로 되돌아갈 수 있어야 한다.
+/// 확정된 후보 → 수량 → [완료]. 오선택 시 즉시 목록으로 되돌아갈 수 있어야 한다.
 class _ConfirmFor extends ConsumerWidget {
   const _ConfirmFor({required this.candidate, required this.canReselect});
 
@@ -133,26 +133,14 @@ class _ConfirmFor extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final card = ReceivingConfirmCard(
-      modelName: candidate.product.modelName,
-      producer: candidate.product.producer,
-      vintage: candidate.year,
-    );
-    if (!canReselect) return card;
+    // 빈티지 행이 없는 제품은 입고 대상이 될 수 없다(wine_vintage_id 부재).
+    if (!candidate.isSelectable) return const _UnregisteredCard();
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        card,
-        TextButton.icon(
-          key: const Key('reselect_candidate'),
-          onPressed: () =>
-              ref.read(selectedCandidateProvider.notifier).state = null,
-          icon: const Icon(Icons.refresh, size: 18),
-          label: const Text('다시 선택'),
-        ),
-      ],
+    return ReceivingPanel(
+      candidate: candidate,
+      onReselect: canReselect
+          ? () => ref.read(selectedCandidateProvider.notifier).state = null
+          : null,
     );
   }
 }

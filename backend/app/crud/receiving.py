@@ -1,0 +1,63 @@
+"""입고 기록 DB 접근 계층 (FR7).
+
+⚠️ 재고를 세는 곳은 여기 한 곳이다. 화면·리포트가 각자 합산하면 soft-delete 필터를
+빠뜨린 사본이 번진다. 출고·판매가 생기면 현재고 정의가 바뀌는데, 그때 고칠 지점도 여기다.
+"""
+from __future__ import annotations
+
+import uuid
+from collections.abc import Iterable
+
+from sqlalchemy import func
+from sqlmodel import Session, select
+
+from app.models.receiving import ReceivingRecord
+
+
+def create_record(
+    session: Session,
+    *,
+    wine_vintage_id: uuid.UUID,
+    quantity: int,
+    staff_id: uuid.UUID,
+    memo: str | None = None,
+) -> ReceivingRecord:
+    """입고 1건 생성. `received_at`은 모델 기본값(서버 UTC)이 채운다 — 인자로 받지 않는다."""
+    record = ReceivingRecord(
+        wine_vintage_id=wine_vintage_id,
+        quantity=quantity,
+        staff_id=staff_id,
+        memo=memo,
+    )
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return record
+
+
+def get_stock_map(
+    session: Session, vintage_ids: Iterable[uuid.UUID]
+) -> dict[uuid.UUID, int]:
+    """빈티지별 현재고. 단일 GROUP BY 쿼리(N+1 금지, NFR1 2초).
+
+    현재고 = 입고 수량 합계. 출고·판매는 범위 밖(Non-Goal)이라 아직 뺄 것이 없다.
+    기록이 없는 빈티지도 0으로 채워 반환한다 — 키가 빠지면 호출부마다 null 처리를
+    재발명하게 된다.
+    """
+    ids = list(vintage_ids)
+    stock = dict.fromkeys(ids, 0)
+    if not ids:
+        return stock
+
+    rows = session.exec(
+        select(
+            ReceivingRecord.wine_vintage_id,
+            func.coalesce(func.sum(ReceivingRecord.quantity), 0),
+        )
+        .where(ReceivingRecord.wine_vintage_id.in_(ids))
+        .where(ReceivingRecord.deleted_at.is_(None))  # soft-delete 제외
+        .group_by(ReceivingRecord.wine_vintage_id)
+    ).all()
+    for vintage_id, total in rows:
+        stock[vintage_id] = int(total)
+    return stock
