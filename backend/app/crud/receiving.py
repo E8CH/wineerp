@@ -7,11 +7,14 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import desc, func
 from sqlmodel import Session, select
 
 from app.models.receiving import ReceivingRecord, ReceivingSource
+from app.models.user import User
+from app.models.wine import WineProduct, WineVintage
 
 # SQLite의 바인드 파라미터 상한(32,766)이 더 낮으므로 그쪽에 맞춘다.
 _MAX_BIND_PARAMS = 30_000
@@ -86,3 +89,25 @@ def get_stock_map(
         for vintage_id, total in rows:
             stock[vintage_id] = int(total)
     return stock
+
+
+def list_records(
+    session: Session, *, start: datetime, end: datetime
+) -> list[tuple]:
+    """기간 내 입고 내역. 와인·담당자를 **한 번의 조인**으로 가져온다.
+
+    행마다 와인/사용자를 따로 조회하면 하루 100건에서 300 왕복이 된다.
+    경계는 호출부가 `core.timeframe.period_bounds`로 KST 기준 계산해 넘긴다.
+    """
+    return list(
+        session.exec(
+            select(ReceivingRecord, WineVintage, WineProduct, User)
+            .join(WineVintage, ReceivingRecord.wine_vintage_id == WineVintage.id)
+            .join(WineProduct, WineVintage.wine_product_id == WineProduct.id)
+            .join(User, ReceivingRecord.staff_id == User.id)
+            .where(ReceivingRecord.deleted_at.is_(None))  # soft-delete 제외(AR6)
+            .where(ReceivingRecord.received_at >= start)
+            .where(ReceivingRecord.received_at < end)
+            .order_by(desc(ReceivingRecord.received_at), ReceivingRecord.id)
+        ).all()
+    )

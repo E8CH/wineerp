@@ -37,3 +37,24 @@ class ReceivingRead(BaseModel):
     received_at: datetime
     staff_id: uuid.UUID
     memo: str | None
+
+
+class ReceivingHistoryItem(BaseModel):
+    id: uuid.UUID
+    wine_vintage_id: uuid.UUID
+    producer: str
+    model_name: str
+    vintage: int | None  # None = NV
+    quantity: int
+    received_at: datetime
+    staff_email: str
+    memo: str | None
+    representative_image_key: str | None
+    # 'initial_setup'이면 초기 세팅분이다. 구분하지 않으면 작업자가
+    # "초기 세팅으로 넣은 10병"을 "오늘 입고된 10병"으로 읽는다(Story 3.3).
+    source: str
+
+
+class ReceivingHistory(BaseModel):
+    data: list[ReceivingHistoryItem]
+    count: int

@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "wineerp"
     API_V1_PREFIX: str = "/api/v1"
     ENVIRONMENT: str = "local"  # local | staging | production
+    # 기간 조회·리포트의 달력 경계. UTC로 자르면 오전 입고가 전날로 분류된다.
+    TIMEZONE: str = "Asia/Seoul"
 
     # --- 보안 (Story 1.3에서 실사용) ---
     SECRET_KEY: str = "change-me-in-env"
