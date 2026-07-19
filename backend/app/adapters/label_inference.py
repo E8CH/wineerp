@@ -23,18 +23,26 @@ from app.services.ports import InferenceResult, LabelInferencePort
 
 logger = logging.getLogger(__name__)
 
-# ⚠️ 실호출 검증(2026-07-19)으로 다듬은 프롬프트.
-# 초안은 "생산자명과 제품명이 다르면 제품명을 우선"이라고만 했는데, 보르도 라벨은
-# 샤토명이 곧 제품명이라 OpenAI가 "Grand Vin de Bordeaux"(등급 문구)를 골랐다.
-# 무엇을 **버려야 하는지**를 명시하는 편이 무엇을 고르라고 하는 것보다 잘 듣는다.
+# ⚠️ 실호출로 두 번 다듬은 프롬프트(2026-07-19).
+#
+# 1차: 초안은 "생산자명과 제품명이 다르면 제품명 우선"이었는데, 보르도 라벨에서
+#      OpenAI가 "Grand Vin de Bordeaux"(등급 문구)를 골랐다 — 샤토는 생산자명이 곧
+#      제품명이라 지시가 정반대였다.
+# 2차: **실제 병 사진**(Mar de Frades Albariño)으로 재검증하니 두 모델 다
+#      "Mar de Frades"만 반환했다. 그러면 같은 생산자의 다른 퀴베(Finca Valiñas 등)가
+#      **하나의 WineProduct로 합쳐지고** 그 아래 WineVintage가 섞인다 — 2계층 모델
+#      (AR2)이 존재하는 이유를 정면으로 깬다. "병을 구분하는 이름"을 요구하도록 바꿨다.
+#
+# 무엇을 **버려야 하는지** 명시하는 편이 무엇을 고르라고 하는 것보다 잘 듣는다.
 _PROMPT = (
-    "이 와인 라벨 사진에서 병을 특정하는 이름을 추출하세요.\n"
-    "- 보르도 샤토처럼 생산자명이 곧 제품명이면 그 이름을 그대로 씁니다"
+    "이 와인 라벨 사진에서 **이 병을 다른 병과 구분하는 이름**을 추출하세요.\n"
+    "- 생산자가 여러 와인을 만들면 생산자명만으로는 부족합니다. 품종·퀴베·밭 이름 등"
+    " 라벨에 적힌 구분자를 함께 넣으세요 (예: Mar de Frades Albariño).\n"
+    "- 생산자명 자체가 제품명인 경우(보르도 샤토 등)는 그대로 씁니다"
     " (예: Château Margaux).\n"
-    "- 생산자와 별도의 퀴베·제품명이 있으면 그 이름을 씁니다"
-    " (예: Penfolds Grange → Grange).\n"
     "- 다음은 이름이 아니므로 제외하세요: 등급·품질 문구"
-    "(Grand Vin, Grand Cru, Reserva, Appellation … Contrôlée),"
+    "(Grand Vin, Grand Cru, Reserva 등), 원산지·등급 표기"
+    "(Rías Baixas, Denominación de Origen, Appellation … Contrôlée),"
     " 병입 문구(Mis en bouteille …), 용량·도수, 수입사·판매원 표기, 연도.\n"
     "- 라벨에서 이름을 읽을 수 없으면 model_name을 null로 두세요. 추측하지 마세요.\n"
     "- confidence는 글자가 선명하고 이름이 분명할 때만 0.8 이상을 주세요.\n"
