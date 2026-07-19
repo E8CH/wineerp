@@ -75,6 +75,13 @@ def test_app_imports_are_not_dev_only_dependencies():
             continue  # 런타임 의존성이 제공 — 정상
         if dists & dev:
             offenders.append(f"{module} (제공: {sorted(dists)}) — dev 그룹에만 선언됨")
+        else:
+            # ⚠️ 어느 그룹에도 없는 경우. 지금 로컬에 깔려 있는 것은 다른 패키지의
+            # 전이 의존성이기 때문이며, 그 패키지가 버전을 올리며 끊으면 프로덕션이
+            # 부팅하지 못한다. httpx 사고와 같은 종류이고 모양만 다르다.
+            offenders.append(
+                f"{module} (제공: {sorted(dists)}) — 어느 그룹에도 선언되지 않음"
+            )
 
     assert not offenders, (
         "다음 모듈은 앱 런타임에서 import되지만 dev 의존성에만 있습니다. "

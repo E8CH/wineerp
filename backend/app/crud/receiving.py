@@ -114,9 +114,20 @@ def list_records(
     )
 
 
-def get_record(session: Session, record_id: uuid.UUID) -> ReceivingRecord | None:
-    """활성 레코드만. 이미 취소(soft-delete)된 것은 수정 대상이 아니다."""
-    rec = session.get(ReceivingRecord, record_id)
+def get_record(
+    session: Session, record_id: uuid.UUID, *, for_update: bool = False
+) -> ReceivingRecord | None:
+    """활성 레코드만. 이미 취소(soft-delete)된 것은 수정 대상이 아니다.
+
+    `for_update=True`면 행을 잠근다. ⚠️ 없으면 두 사람이 10병짜리를 동시에 열어
+    각각 12·15로 저장했을 때 **두 이력 행이 모두 `before=10`**이 되어 서로 배타적인
+    역사를 주장하고, 재고는 조용히 3만큼 틀린다(lost update).
+    SQLite는 이 힌트를 무시하지만 운영(PostgreSQL)에서는 직렬화된다.
+    """
+    stmt = select(ReceivingRecord).where(ReceivingRecord.id == record_id)
+    if for_update:
+        stmt = stmt.with_for_update()
+    rec = session.exec(stmt).first()
     if rec is None or rec.deleted_at is not None:
         return None
     return rec
@@ -159,6 +170,8 @@ def update_record(
             receiving_record_id=record.id,
             before_quantity=record.quantity,
             after_quantity=quantity,
+            before_memo=record.memo,
+            after_memo=new_memo,
             changed_by=changed_by,
             reason=reason,
         )

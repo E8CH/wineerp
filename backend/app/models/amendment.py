@@ -26,6 +26,10 @@ class ReceivingAmendment(SQLModel, table=True):
     )
     before_quantity: int = Field(nullable=False)
     after_quantity: int = Field(nullable=False)
+    # 메모 변경도 원장의 변경이다. 수량만 기록하면 "명세서 불일치" -> "정상" 같은
+    # 정정이 감사에서 보이지 않는다 — 메모는 이의 사유가 적히는 유일한 칸이다.
+    before_memo: str | None = None
+    after_memo: str | None = None
     changed_by: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)
     changed_at: datetime = Field(
         default_factory=_utcnow,

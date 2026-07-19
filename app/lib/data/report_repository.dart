@@ -54,13 +54,16 @@ class ReceivingReport {
     required this.totalQuantity,
     required this.recordCount,
     required this.distinctWines,
+    this.distinctProducts = 0,
   });
 
   final List<DayBucket> buckets;
   final List<TopProduct> topProducts;
   final int totalQuantity;
   final int recordCount;
+  /// 재고 단위(빈티지) 수. `topProducts`는 제품 단위라 숫자가 다를 수 있다.
   final int distinctWines;
+  final int distinctProducts;
 
   bool get isEmpty => totalQuantity == 0;
 
@@ -74,6 +77,7 @@ class ReceivingReport {
         totalQuantity: j['total_quantity'] as int? ?? 0,
         recordCount: j['record_count'] as int? ?? 0,
         distinctWines: j['distinct_wines'] as int? ?? 0,
+        distinctProducts: j['distinct_products'] as int? ?? 0,
       );
 }
 

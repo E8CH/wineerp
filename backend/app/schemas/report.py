@@ -20,4 +20,6 @@ class ReceivingReport(BaseModel):
     top_products: list[TopProduct]
     total_quantity: int
     record_count: int
+    # 재고 단위(빈티지) 수. `top_products`는 제품 단위이므로 두 숫자는 다를 수 있다.
     distinct_wines: int
+    distinct_products: int = 0

@@ -412,3 +412,113 @@ def test_history_shows_the_latest_amender_not_the_first(client, engine):
         f"{API}/receiving", params={"period": "month"}, headers=_h(alice)
     ).json()["data"][0]
     assert item["amended_by"] == "carol@wineerp.co"
+
+
+def test_memo_change_is_recorded_in_the_amendment(client, engine):
+    """🔴 수량만 기록하면 "명세서 불일치" -> "정상" 정정이 감사에서 사라진다.
+
+    메모는 이의 사유가 적히는 유일한 칸이라, 그 변경이야말로 감사가 보고 싶어 한다.
+    """
+    token = _token(client)
+    rec = _make_record(client, token)
+    client.patch(
+        f"{API}/receiving/{rec['id']}",
+        json={"quantity": 12, "memo": "명세서 불일치"},
+        headers=_h(token),
+    )
+    client.patch(
+        f"{API}/receiving/{rec['id']}",
+        json={"quantity": 12, "memo": "확인 완료"},
+        headers=_h(token),
+    )
+
+    with Session(engine) as s:
+        history = receiving_crud.list_amendments(s, _uuid.UUID(rec["id"]))
+    assert [(h.before_memo, h.after_memo) for h in history] == [
+        (None, "명세서 불일치"),
+        ("명세서 불일치", "확인 완료"),
+    ]
+
+
+def test_quantity_edit_also_snapshots_the_memo(client, engine):
+    """수량만 고쳐도 그 시점의 메모가 남아야 이력만으로 상태를 재구성할 수 있다."""
+    token = _token(client)
+    rec = _make_record(client, token)
+    client.patch(
+        f"{API}/receiving/{rec['id']}",
+        json={"quantity": 12, "memo": "파손 2병"},
+        headers=_h(token),
+    )
+    client.patch(f"{API}/receiving/{rec['id']}", json={"quantity": 10}, headers=_h(token))
+
+    with Session(engine) as s:
+        last = receiving_crud.list_amendments(s, _uuid.UUID(rec["id"]))[-1]
+    assert (last.before_quantity, last.after_quantity) == (12, 10)
+    assert last.before_memo == last.after_memo == "파손 2병"
+
+
+def test_amend_locks_the_row(client, engine):
+    """동시 수정에서 두 이력이 같은 before를 주장하면 재고가 조용히 틀린다.
+
+    ⚠️ SQLite는 `FOR UPDATE`를 무시하므로 이 테스트는 **쿼리가 잠금을 요청하는지**만
+    확인한다. 실제 직렬화는 PostgreSQL에서만 일어난다 — 여기서 검증할 수 없는 것을
+    검증한 척하지 않는다.
+    """
+    from sqlalchemy.dialects import postgresql
+    from sqlmodel import select as _select
+
+    from app.models.receiving import ReceivingRecord
+
+    stmt = _select(ReceivingRecord).where(ReceivingRecord.id == _uuid.uuid4())
+    locked = str(stmt.with_for_update().compile(dialect=postgresql.dialect()))
+    assert "FOR UPDATE" in locked
+
+    import inspect
+
+    src = inspect.getsource(receiving_crud.get_record)
+    assert "with_for_update()" in src, "get_record가 잠금 경로를 제공해야 한다"
+
+    from app.api.routes import receiving as route
+
+    assert "for_update=True" in inspect.getsource(route.update_receiving)
+    assert "for_update=True" in inspect.getsource(route.cancel_receiving)
+
+
+def test_staff_can_gut_a_record_without_manager_approval(client, engine):
+    """⚠️ 알려진 설계 공백 — 고치지 않고 **문서화**한다.
+
+    취소(DELETE)는 manager 전용인데, staff가 수량을 1로 낮추면 같은 결과에 가깝다.
+    200병짜리를 1로 만들면 재고의 99.5%가 403 없이 사라진다.
+
+    고치지 않은 이유: 어떤 임계값도 임의적이다. "절반 이상 감소는 manager"라고 정하면
+    12→5 같은 일상 정정이 막히고, 4.2가 "수정은 누구나"로 정한 근거(정정은 흔하고
+    되돌릴 수 있다)와 충돌한다. **제품 판단이 필요한 지점**이므로 임의 규칙을
+    발명하는 대신 현재 동작을 고정해 둔다 — 나중에 정책이 정해지면 이 테스트가
+    바뀌어야 할 곳을 가리킨다.
+
+    완화책은 이미 있다: 모든 수정이 `receiving_amendments`에 before/after로 남고,
+    내역 화면이 `amended_by`로 누가 고쳤는지 보여준다.
+    """
+    staff = _token(client)
+    vid = client.post(
+        f"{API}/scan", json={"code": "3760000000015"}, headers=_h(staff)
+    ).json()["products"][0]["vintages"][0]["id"]
+    rec = client.post(
+        f"{API}/receiving",
+        json={"wine_vintage_id": vid, "quantity": 200},
+        headers=_h(staff),
+    ).json()
+
+    assert client.delete(f"{API}/receiving/{rec['id']}", headers=_h(staff)).status_code == 403
+
+    resp = client.patch(
+        f"{API}/receiving/{rec['id']}", json={"quantity": 1}, headers=_h(staff)
+    )
+    assert resp.status_code == 200, "현재는 허용된다 — 정책이 정해지면 여기가 바뀐다"
+    assert _stock(engine, rec["wine_vintage_id"]) == 1
+
+    with Session(engine) as s:
+        history = receiving_crud.list_amendments(s, _uuid.UUID(rec["id"]))
+    assert (history[0].before_quantity, history[0].after_quantity) == (200, 1), (
+        "최소한 흔적은 남는다 — 이것이 현재의 유일한 완화책이다"
+    )

@@ -1,6 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/auth_repository.dart';
+import '../../data/history_repository.dart';
+import '../../data/report_repository.dart';
+import '../receiving/receiving_controller.dart';
+import '../registration/registration_controller.dart';
+import '../registration/setup_mode_controller.dart';
+import '../scan/scan_controller.dart';
 
 /// 인증 상태. 토큰은 메모리 보관(POC — 재시작 시 재로그인). 영속화는 후속.
 class AuthState {
@@ -57,7 +63,22 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
-  void logout() => state = const AuthState();
+  /// ⚠️ 상태만 비우면 안 된다. 데이터 프로바이더는 autoDispose가 아니고 탭은
+  /// IndexedStack으로 살아 있어, 다른 계정으로 로그인하면 내역 탭이 **이전 사용자의
+  /// 입고 기록**(그 사람 이메일까지)을 그대로 보여준다. 리포트는 역할 가드가 있지만
+  /// 내역에는 없다.
+  void logout() {
+    ref.invalidate(historyProvider);
+    ref.invalidate(reportProvider);
+    ref.invalidate(matchProvider);
+    ref.invalidate(selectedCandidateProvider);
+    ref.invalidate(registeredCandidateProvider);
+    ref.invalidate(registeringProvider);
+    ref.invalidate(receivingControllerProvider);
+    ref.invalidate(registrationControllerProvider);
+    ref.invalidate(setupModeProvider);
+    state = const AuthState();
+  }
 }
 
 final authControllerProvider =

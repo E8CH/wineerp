@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wineerp_app/data/auth_repository.dart';
 import 'package:wineerp_app/features/auth/auth_controller.dart';
+import 'package:wineerp_app/features/receiving/receiving_controller.dart';
+import 'package:wineerp_app/features/scan/scan_controller.dart';
 import 'package:wineerp_app/features/auth/login_screen.dart';
 
 class _FakeAuthRepo extends AuthRepository {
@@ -76,5 +78,27 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+  });
+
+  test('로그아웃은 이전 사용자의 데이터 프로바이더를 비운다', () async {
+    // 비우지 않으면 다른 계정으로 로그인했을 때 내역 탭이 이전 사용자의
+    // 입고 기록(이메일까지)을 그대로 보여준다 — 내역에는 역할 가드도 없다.
+    final c = ProviderContainer(overrides: [
+      authRepositoryProvider.overrideWithValue(_FakeAuthRepo()),
+    ]);
+    addTearDown(c.dispose);
+
+    c.read(matchProvider.notifier).state = const AsyncData(null);
+    c.read(selectedCandidateProvider.notifier).state = 'v-old';
+    c.read(registeringProvider.notifier).state = true;
+    c.read(receivingControllerProvider.notifier).setQuantity(9);
+
+    c.read(authControllerProvider.notifier).logout();
+    await Future<void>.delayed(Duration.zero);
+
+    expect(c.read(selectedCandidateProvider), isNull);
+    expect(c.read(registeringProvider), isFalse);
+    expect(c.read(receivingControllerProvider).quantity, 1);
+    expect(c.read(authControllerProvider).isAuthenticated, isFalse);
   });
 }
