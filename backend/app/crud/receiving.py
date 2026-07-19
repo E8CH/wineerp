@@ -122,20 +122,36 @@ def get_record(session: Session, record_id: uuid.UUID) -> ReceivingRecord | None
     return rec
 
 
-def update_quantity(
+def normalize_memo(memo: str | None) -> str | None:
+    """빈 문자열은 삭제로 본다.
+
+    `""`와 `None`이 둘 다 저장되면 "메모 있음" 판정이 호출부마다 갈린다
+    (`is None`인지 `strip()` 검사인지). 경계에서 한 번 정규화한다.
+    """
+    if memo is None:
+        return None
+    stripped = memo.strip()
+    return stripped or None
+
+
+def update_record(
     session: Session,
     record: ReceivingRecord,
     *,
     quantity: int,
     changed_by: uuid.UUID,
     reason: str | None = None,
+    memo: str | None = None,
+    memo_provided: bool = False,
 ) -> ReceivingRecord:
-    """수량 수정 + 이력 기록을 **한 트랜잭션**에서.
+    """수량·메모 수정 + 이력 기록을 **한 트랜잭션**에서.
 
-    이력 없이 수량만 덮어쓰면 무엇이 얼마에서 얼마로 바뀌었는지 사라진다.
-    변경이 없으면 이력 행을 만들지 않는다 — 잡음을 남기지 않는다.
+    이력 없이 값만 덮어쓰면 무엇이 얼마에서 얼마로 바뀌었는지 사라진다.
+    아무것도 바뀌지 않으면 이력 행을 만들지 않는다 — 잡음이 진짜 수정을 묻는다.
+    메모만 바꾸는 것도 유효한 수정이며 이력에 남는다(5년 보존 원장).
     """
-    if quantity == record.quantity:
+    new_memo = normalize_memo(memo) if memo_provided else record.memo
+    if quantity == record.quantity and new_memo == record.memo:
         return record
 
     session.add(
@@ -148,6 +164,7 @@ def update_quantity(
         )
     )
     record.quantity = quantity
+    record.memo = new_memo
     session.add(record)
     session.commit()
     session.refresh(record)

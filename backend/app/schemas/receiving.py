@@ -67,3 +67,5 @@ class ReceivingUpdate(BaseModel):
     # 권한도 다르다(취소는 manager 전용).
     quantity: int = Field(ge=1, le=MAX_QUANTITY)
     reason: str | None = Field(default=None, max_length=200)
+    # 메모 수정(FR12). 미지정이면 기존 값을 유지하고, 빈 문자열이면 삭제한다.
+    memo: str | None = Field(default=None, max_length=500)

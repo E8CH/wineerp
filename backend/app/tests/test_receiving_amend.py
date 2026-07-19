@@ -228,3 +228,113 @@ def test_no_hard_delete_function_exists():
     """AR6 — 하드삭제 경로를 아예 만들지 않는 것이 규칙을 지키는 방법이다."""
     names = dir(receiving_crud)
     assert not any("hard" in n or n == "delete_record" for n in names)
+
+
+# --- Story 4.3: 메모 ----------------------------------------------------------
+
+
+def test_memo_is_stored_on_create_and_shown_in_history(client):
+    token = _token(client)
+    vid = client.post(
+        f"{API}/scan", json={"code": "3760000000015"}, headers=_h(token)
+    ).json()["products"][0]["vintages"][0]["id"]
+    client.post(
+        f"{API}/receiving",
+        json={"wine_vintage_id": vid, "quantity": 2, "memo": "코르크 손상"},
+        headers=_h(token),
+    )
+    body = client.get(f"{API}/receiving", params={"period": "month"}, headers=_h(token)).json()
+    assert body["data"][0]["memo"] == "코르크 손상"
+
+
+def test_blank_memo_is_stored_as_null(client, engine):
+    """`""`와 null이 공존하면 '메모 있음' 판정이 호출부마다 갈린다."""
+    from app.models.receiving import ReceivingRecord
+
+    token = _token(client)
+    vid = client.post(
+        f"{API}/scan", json={"code": "3760000000015"}, headers=_h(token)
+    ).json()["products"][0]["vintages"][0]["id"]
+    created = client.post(
+        f"{API}/receiving",
+        json={"wine_vintage_id": vid, "quantity": 1, "memo": "   "},
+        headers=_h(token),
+    ).json()
+
+    with Session(engine) as s:
+        assert s.get(ReceivingRecord, _uuid.UUID(created["id"])).memo is None
+
+
+def test_memo_only_edit_is_saved_and_recorded(client, engine):
+    """메모만 바꾸는 것도 유효한 수정이고 이력에 남아야 한다."""
+    from app.models.receiving import ReceivingRecord
+
+    token = _token(client)
+    rec = _make_record(client, token)
+    resp = client.patch(
+        f"{API}/receiving/{rec['id']}",
+        json={"quantity": 12, "memo": "명세서 불일치"},  # 수량은 그대로
+        headers=_h(token),
+    )
+    assert resp.status_code == 200
+
+    with Session(engine) as s:
+        assert s.get(ReceivingRecord, _uuid.UUID(rec["id"])).memo == "명세서 불일치"
+        history = receiving_crud.list_amendments(s, _uuid.UUID(rec["id"]))
+    assert len(history) == 1, "메모 변경도 5년 보존 원장의 변경이다"
+    assert history[0].before_quantity == history[0].after_quantity == 12
+
+
+def test_blank_memo_on_update_clears_it(client, engine):
+    from app.models.receiving import ReceivingRecord
+
+    token = _token(client)
+    rec = _make_record(client, token)
+    client.patch(
+        f"{API}/receiving/{rec['id']}", json={"quantity": 12, "memo": "임시"}, headers=_h(token)
+    )
+    client.patch(
+        f"{API}/receiving/{rec['id']}", json={"quantity": 12, "memo": ""}, headers=_h(token)
+    )
+    with Session(engine) as s:
+        assert s.get(ReceivingRecord, _uuid.UUID(rec["id"])).memo is None
+
+
+def test_omitting_memo_keeps_existing(client, engine):
+    """미지정과 삭제는 다르다 — 수량만 고칠 때 메모가 날아가면 안 된다."""
+    from app.models.receiving import ReceivingRecord
+
+    token = _token(client)
+    rec = _make_record(client, token)
+    client.patch(
+        f"{API}/receiving/{rec['id']}",
+        json={"quantity": 12, "memo": "유지되어야"},
+        headers=_h(token),
+    )
+    client.patch(f"{API}/receiving/{rec['id']}", json={"quantity": 5}, headers=_h(token))
+
+    with Session(engine) as s:
+        row = s.get(ReceivingRecord, _uuid.UUID(rec["id"]))
+    assert row.quantity == 5
+    assert row.memo == "유지되어야"
+
+
+def test_nothing_changed_writes_no_amendment(client, engine):
+    token = _token(client)
+    rec = _make_record(client, token)
+    client.patch(
+        f"{API}/receiving/{rec['id']}", json={"quantity": 12}, headers=_h(token)
+    )
+    with Session(engine) as s:
+        assert receiving_crud.list_amendments(s, _uuid.UUID(rec["id"])) == []
+
+
+def test_memo_length_limit(client):
+    token = _token(client)
+    rec = _make_record(client, token)
+    resp = client.patch(
+        f"{API}/receiving/{rec['id']}",
+        json={"quantity": 12, "memo": "가" * 501},
+        headers=_h(token),
+    )
+    assert resp.status_code == 422

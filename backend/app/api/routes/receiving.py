@@ -47,7 +47,7 @@ def create_receiving(
             wine_vintage_id=payload.wine_vintage_id,
             quantity=payload.quantity,
             staff_id=current_user.id,  # 담당자는 토큰에서만 — body를 신뢰하지 않는다
-            memo=payload.memo,
+            memo=receiving_crud.normalize_memo(payload.memo),
             idempotency_key=key,
         )
     except IntegrityError:
@@ -79,12 +79,15 @@ def update_receiving(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="입고 기록을 찾을 수 없습니다.",
         )
-    updated = receiving_crud.update_quantity(
+    updated = receiving_crud.update_record(
         session,
         record,
         quantity=payload.quantity,
         changed_by=current_user.id,
         reason=payload.reason,
+        memo=payload.memo,
+        # 필드가 요청에 실제로 담겼을 때만 메모를 건드린다 — 미지정과 삭제를 구분한다.
+        memo_provided="memo" in payload.model_fields_set,
     )
     return ReceivingRead.model_validate(updated)
 

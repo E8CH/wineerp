@@ -23,6 +23,7 @@ class _FakeReceivingRepo extends ReceivingRepository {
   final Duration delay;
   int calls = 0;
   final List<String?> keysSeen = [];
+  final List<String?> memosSeen = [];
 
   @override
   Future<String?> create({
@@ -33,6 +34,7 @@ class _FakeReceivingRepo extends ReceivingRepository {
   }) async {
     calls++;
     keysSeen.add(idempotencyKey);
+    memosSeen.add(memo);
     if (delay > Duration.zero) await Future<void>.delayed(delay);
     if (fail) {
       // 실제 실패는 DioException으로 온다. 일반 Exception을 던지면 컨트롤러가
@@ -252,6 +254,37 @@ void main() {
           findsOneWidget);
       expect(c.read(receivingControllerProvider).quantity, 3, reason: '다시 세게 하지 않는다');
       expect(c.read(selectedCandidateProvider), 'v1', reason: '선택 유지');
+    });
+
+    testWidgets('메모는 기본으로 접혀 있다 (3탭 리듬 보호)', (tester) async {
+      // 상시 노출하면 100병 처리 시 100번 지나쳐야 한다(NFR3).
+      await tester.pumpWidget(_host(_container(_FakeReceivingRepo())));
+      expect(find.byKey(const Key('memo_toggle')), findsOneWidget);
+      expect(find.byKey(const Key('memo_field')), findsNothing);
+    });
+
+    testWidgets('메모를 펼쳐 입력하면 함께 전송된다', (tester) async {
+      final repo = _FakeReceivingRepo();
+      await tester.pumpWidget(_host(_container(repo)));
+
+      await tester.tap(find.byKey(const Key('memo_toggle')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('memo_field')), '코르크 손상');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('receiving_complete')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+
+      expect(repo.memosSeen.single, '코르크 손상');
+    });
+
+    testWidgets('메모를 안 쓰면 null로 전송된다', (tester) async {
+      final repo = _FakeReceivingRepo();
+      await tester.pumpWidget(_host(_container(repo)));
+      await tester.tap(find.byKey(const Key('receiving_complete')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 3));
+      expect(repo.memosSeen.single, isNull);
     });
   });
 }

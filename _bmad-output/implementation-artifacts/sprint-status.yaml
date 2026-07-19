@@ -74,7 +74,7 @@ development_status:
   epic-4: in-progress
   4-1-입고-내역-조회: review
   4-2-입고-수량-수정: review
-  4-3-입고-메모: backlog
+  4-3-입고-메모: review
   epic-4-retrospective: optional
 
   # Epic 5 — 리포트 & 보고

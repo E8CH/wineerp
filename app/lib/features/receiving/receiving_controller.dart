@@ -18,6 +18,7 @@ class ReceivingState {
     this.quantity = 1,
     this.phase = ReceivingPhase.idle,
     this.error,
+    this.memo,
   });
 
   final int quantity;
@@ -28,6 +29,9 @@ class ReceivingState {
   /// 입고가 성공하면 새 키가 발급된다 — 다음 병은 별개 입고다.
   final String idempotencyKey;
 
+  /// 입고 메모(FR12, 선택). 파손·명세서 불일치 같은 예외 상황용이다.
+  final String? memo;
+
   bool get isSubmitting => phase == ReceivingPhase.submitting;
 
   ReceivingState copyWith({
@@ -35,9 +39,11 @@ class ReceivingState {
     ReceivingPhase? phase,
     String? error,
     bool clearError = false,
+    String? memo,
   }) =>
       ReceivingState(
         idempotencyKey: idempotencyKey, // 재시도 간 절대 바뀌지 않는다
+        memo: memo ?? this.memo,
         quantity: quantity ?? this.quantity,
         phase: phase ?? this.phase,
         error: clearError ? null : (error ?? this.error),
@@ -47,6 +53,8 @@ class ReceivingState {
 class ReceivingController extends Notifier<ReceivingState> {
   @override
   ReceivingState build() => ReceivingState(idempotencyKey: uuidV4());
+
+  void setMemo(String v) => state = state.copyWith(memo: v);
 
   void setQuantity(int q) {
     if (state.isSubmitting) return;
@@ -64,6 +72,7 @@ class ReceivingController extends Notifier<ReceivingState> {
       await ref.read(receivingRepositoryProvider).create(
             wineVintageId: wineVintageId,
             quantity: state.quantity,
+            memo: state.memo,
             // ⚠️ state의 키를 그대로 보낸다. 여기서 새로 만들면 재시도마다 키가 달라져
             // 서버가 중복을 구분하지 못하고 멱등성이 통째로 무력해진다.
             idempotencyKey: state.idempotencyKey,

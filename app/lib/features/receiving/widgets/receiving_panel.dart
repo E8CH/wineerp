@@ -79,6 +79,14 @@ class ReceivingPanel extends ConsumerWidget {
                   onChanged:
                       ref.read(receivingControllerProvider.notifier).setQuantity,
                 ),
+                // ⚠️ 기본은 접힘. 상시 노출하면 "찍고→수량→완료" 3탭 리듬에 필드가
+                // 끼어들고, 100병을 처리하는 직원이 100번 그것을 지나쳐야 한다(NFR3).
+                // 메모는 파손·불일치 같은 예외 상황용이다.
+                _MemoField(
+                  enabled: !state.isSubmitting,
+                  onChanged:
+                      ref.read(receivingControllerProvider.notifier).setMemo,
+                ),
                 if (state.error != null) _ErrorRow(message: state.error!),
                 const SizedBox(height: 8),
                 SizedBox(
@@ -114,6 +122,59 @@ class ReceivingPanel extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 접이식 메모 입력. 필요할 때만 펼친다.
+class _MemoField extends StatefulWidget {
+  const _MemoField({required this.enabled, required this.onChanged});
+
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  @override
+  State<_MemoField> createState() => _MemoFieldState();
+}
+
+class _MemoFieldState extends State<_MemoField> {
+  bool _open = false;
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_open) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          key: const Key('memo_toggle'),
+          onPressed: widget.enabled ? () => setState(() => _open = true) : null,
+          icon: const Icon(Icons.sticky_note_2_outlined, size: 18),
+          label: const Text('메모 추가'),
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: TextField(
+        key: const Key('memo_field'),
+        controller: _controller,
+        enabled: widget.enabled,
+        maxLength: 500,
+        onChanged: widget.onChanged,
+        decoration: const InputDecoration(
+          labelText: '메모 (선택)',
+          hintText: '파손·명세서 불일치 등',
+          border: OutlineInputBorder(),
+          counterText: '',
+        ),
+      ),
     );
   }
 }
