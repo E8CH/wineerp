@@ -47,3 +47,13 @@ final matchProvider =
 /// `WineVintageRead`에 `==`가 없어 객체가 아닌 id 문자열로 비교한다.
 final selectedCandidateProvider = StateProvider<String?>((ref) => null);
 
+/// 신규 등록 패널이 열려 있는지 (Story 3.2). 위젯 로컬 state가 아닌 이유는
+/// 후보 선택과 같다 — 폴드 접기/펴기가 진행 중이던 등록을 날리면 안 된다.
+final registeringProvider = StateProvider<bool>((ref) => false);
+
+/// 방금 등록해 곧바로 입고로 이어갈 후보. 완료·재스캔 시 함께 비운다.
+///
+/// id가 아니라 후보 객체를 담는 이유: 확인 카드는 모델명·생산자·빈티지를 보여줘야 하는데,
+/// 방금 만든 마스터를 다시 스캔·조회해서 가져오면 왕복이 하나 더 늘고 그동안 화면이 빈다.
+final registeredCandidateProvider = StateProvider<VintageCandidate?>((ref) => null);
+

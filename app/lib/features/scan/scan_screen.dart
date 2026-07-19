@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/scan_models.dart';
 import '../../data/scan_repository.dart';
 import '../receiving/receiving_controller.dart';
+import '../registration/registration_controller.dart';
+import '../registration/registration_panel.dart';
 import '../receiving/widgets/candidate_list.dart';
 import '../receiving/widgets/receiving_panel.dart';
 import 'scan_controller.dart';
@@ -22,6 +24,8 @@ class ScanScreen extends ConsumerWidget {
     // 있으므로, 와인 A에 12를 찍어둔 채 와인 B가 프레임에 들어오면 카드만 B로 바뀌고
     // 스테퍼는 12로 남는다 → [완료] 시 B가 12병 기록된다(조용한 오기록).
     ref.invalidate(receivingControllerProvider);
+    ref.read(registeredCandidateProvider.notifier).state = null;
+    ref.read(registeringProvider.notifier).state = false;
     try {
       final result = await ref.read(scanRepositoryProvider).scan(code);
       _set(ref, AsyncData(result));
@@ -103,9 +107,14 @@ class _MatchResult extends ConsumerWidget {
         ),
       ),
       data: (result) {
+        // 방금 등록한 와인이 있으면 그대로 수량 입력으로 이어간다(AC6).
+        final registered = ref.watch(registeredCandidateProvider);
+        if (registered != null) {
+          return _ConfirmFor(candidate: registered, canReselect: false);
+        }
         if (result == null) return const SizedBox.shrink();
         final candidates = result.candidates;
-        if (candidates.isEmpty) return const _UnregisteredCard();
+        if (candidates.isEmpty) return _UnregisteredCard(code: result.code);
 
         // 후보가 하나뿐이면 고를 것이 없으므로 확인 카드로 직행한다.
         // 둘 이상이면 반드시 사람이 라벨을 보고 고른다 — "최신 빈티지" 같은
@@ -141,16 +150,52 @@ class _MatchResult extends ConsumerWidget {
   }
 }
 
-class _UnregisteredCard extends StatelessWidget {
-  const _UnregisteredCard();
+/// 미매칭 → 신규 등록 유도. 등록을 시작하면 같은 자리에 등록 패널이 뜬다(FR6).
+class _UnregisteredCard extends ConsumerWidget {
+  const _UnregisteredCard({this.code});
+
+  /// 스캔된 바코드. 등록 시 연결하면 다음부터 바로 매칭된다.
+  final String? code;
 
   @override
-  Widget build(BuildContext context) {
-    return const Card(
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (ref.watch(registeringProvider)) {
+      return RegistrationPanel(
+        barcode: code,
+        onCancel: () {
+          ref.read(registrationControllerProvider.notifier).reset();
+          ref.read(registeringProvider.notifier).state = false;
+        },
+        onRegistered: (vintageId) {
+          // 등록 직후 같은 흐름으로 수량 입력·완료까지 이어진다(AC6).
+          final reg = ref.read(registrationControllerProvider);
+          ref.read(registeredCandidateProvider.notifier).state = VintageCandidate(
+            product: WineProductRead(
+              id: 'new',
+              producer: reg.producer.trim(),
+              modelName: reg.modelName.trim(),
+            ),
+            vintage: WineVintageRead(
+              id: vintageId,
+              vintage: reg.vintageToSubmit,
+            ),
+          );
+          ref.read(registrationControllerProvider.notifier).reset();
+          ref.read(registeringProvider.notifier).state = false;
+        },
+      );
+    }
+
+    return Card(
       child: ListTile(
-        leading: Icon(Icons.help_outline),
-        title: Text('미등록 와인'),
-        subtitle: Text('새로 등록하시겠습니까? (신규 등록은 곧 제공)'),
+        leading: const Icon(Icons.help_outline),
+        title: const Text('미등록 와인'),
+        subtitle: const Text('라벨 사진으로 새로 등록할 수 있습니다.'),
+        trailing: FilledButton(
+          key: const Key('start_registration'),
+          onPressed: () => ref.read(registeringProvider.notifier).state = true,
+          child: const Text('새로 등록'),
+        ),
       ),
     );
   }

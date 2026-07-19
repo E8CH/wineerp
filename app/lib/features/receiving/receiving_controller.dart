@@ -103,6 +103,7 @@ class ReceivingController extends Notifier<ReceivingState> {
   void _resetScanLoop() {
     ref.read(matchProvider.notifier).state = const AsyncData(null);
     ref.read(selectedCandidateProvider.notifier).state = null;
+    ref.read(registeredCandidateProvider.notifier).state = null;
     ref.read(scanControllerProvider.notifier).reset();
   }
 }

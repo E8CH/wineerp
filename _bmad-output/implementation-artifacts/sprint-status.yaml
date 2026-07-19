@@ -66,7 +66,7 @@ development_status:
   # Epic 3 — 신규 와인 등록 & 초기 세팅
   epic-3: in-progress
   3-1-labelinferenceport-벤더-어댑터: review
-  3-2-신규-와인-등록: backlog
+  3-2-신규-와인-등록: review
   3-3-초기-재고-세팅-모드: backlog
   epic-3-retrospective: optional
 
