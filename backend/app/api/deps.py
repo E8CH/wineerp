@@ -9,7 +9,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session
 
 from app.adapters.label_inference import get_label_inference
-from app.adapters.storage import get_storage
+from app.adapters.storage import build_storage
 from app.core.config import settings
 from app.core.db import get_session
 from app.core.security import decode_token
@@ -20,6 +20,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_PREFIX}/auth/lo
 
 SessionDep = Annotated[Session, Depends(get_session)]
 TokenDep = Annotated[str, Depends(oauth2_scheme)]
+def get_storage(session: SessionDep) -> StoragePort:
+    """StoragePort 주입. DB 어댑터가 세션을 필요로 하므로 여기서 엮는다.
+
+    테스트는 `app.dependency_overrides[get_storage]`로 로컬 어댑터를 넣는다.
+    """
+    return build_storage(session)
+
+
 StorageDep = Annotated[StoragePort, Depends(get_storage)]
 # 라우트는 팩토리만 안다 — 어댑터 구현을 직접 import하지 않는다(AR4).
 LabelInferenceDep = Annotated[LabelInferencePort, Depends(get_label_inference)]

@@ -5,6 +5,7 @@
   user (Story 1.2) · wine_product/wine_vintage/barcode (Story 2.1) · receiving_record (Story 2.6)
 """
 from app.models.amendment import ReceivingAmendment
+from app.models.image import StoredImage
 from app.models.receiving import ReceivingRecord
 from app.models.user import User, UserRole
 from app.models.wine import (
@@ -23,4 +24,5 @@ __all__ = [
     "BarcodeWineProductLink",
     "ReceivingRecord",
     "ReceivingAmendment",
+    "StoredImage",
 ]
