@@ -84,12 +84,12 @@ def test_create_receiving_returns_201(client):
 
 
 def test_received_at_is_server_generated(client):
-    """클라이언트 시각을 신뢰하지 않는다 — 요청에 보내도 무시된다."""
+    """서버 시각이 유일한 출처. 클라이언트가 보내면 조용히 무시가 아니라 422로 거절한다."""
     token = _token(client)
     vid = _a_vintage_id(client, token)
     before = datetime.now(UTC) - timedelta(seconds=5)
 
-    resp = client.post(
+    injected = client.post(
         f"{API}/receiving",
         json={
             "wine_vintage_id": vid,
@@ -98,22 +98,25 @@ def test_received_at_is_server_generated(client):
         },
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert resp.status_code == 201
-    received = datetime.fromisoformat(resp.json()["received_at"])
-    if received.tzinfo is None:
+    assert injected.status_code == 422, "알 수 없는 필드는 시끄럽게 거절되어야 한다"
+
+    ok = _create(client, token, vid, quantity=1)
+    assert ok.status_code == 201
+    received = datetime.fromisoformat(ok.json()["received_at"])
+    if received.tzinfo is None:  # SQLite는 오프셋을 저장하지 않는다
         received = received.replace(tzinfo=UTC)
     assert received > before  # 1999년이 아니라 지금
 
 
 def test_staff_id_comes_from_token_not_body(client):
-    """body의 staff_id는 읽지 않는다 — 감사 추적이 무의미해지면 안 된다."""
+    """body의 staff_id는 받지도 읽지도 않는다 — 감사 추적이 무의미해지면 안 된다."""
     token = _token(client, "real@wineerp.co")
     vid = _a_vintage_id(client, token)
     me = client.get(
         f"{API}/auth/me", headers={"Authorization": f"Bearer {token}"}
     ).json()
 
-    resp = client.post(
+    spoofed = client.post(
         f"{API}/receiving",
         json={
             "wine_vintage_id": vid,
@@ -122,8 +125,23 @@ def test_staff_id_comes_from_token_not_body(client):
         },
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert resp.status_code == 201
-    assert resp.json()["staff_id"] == me["id"]
+    assert spoofed.status_code == 422
+
+    ok = _create(client, token, vid, quantity=1)
+    assert ok.json()["staff_id"] == me["id"]  # 담당자는 토큰에서만
+
+
+def test_quantity_upper_bound_is_422_not_500(client):
+    """상한이 없으면 PostgreSQL INTEGER를 넘겨 500으로 터진다.
+
+    ⚠️ 이 테스트는 SQLite에서 돌기 때문에 상한 검증(422)만 확인한다 —
+    실제 오버플로는 재현되지 않는다. 그래서 상한이 스키마에 있어야 한다.
+    """
+    token = _token(client)
+    vid = _a_vintage_id(client, token)
+    assert _create(client, token, vid, quantity=3_000_000_000).status_code == 422
+    assert _create(client, token, vid, quantity=1000).status_code == 422
+    assert _create(client, token, vid, quantity=999).status_code == 201
 
 
 def test_quantity_must_be_at_least_one(client):

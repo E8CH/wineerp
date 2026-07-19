@@ -11,7 +11,10 @@ class ReceivingRepository {
 
   final Dio _dio;
 
-  Future<String> create({
+  /// 성공 시 생성된 레코드 id. 서버가 2xx를 준 뒤 본문이 비었거나 형태가 달라도
+  /// **던지지 않는다** — 이 경로에서 예외는 "저장 실패"가 아니라 "저장됐는데 못 읽음"이고,
+  /// 호출부가 재시도하면 입고가 2건이 된다. 응답 파싱은 실패 신호가 될 수 없다.
+  Future<String?> create({
     required String wineVintageId,
     required int quantity,
     String? memo,
@@ -24,7 +27,7 @@ class ReceivingRepository {
         'memo': ?memo,
       },
     );
-    return resp.data!['id'] as String;
+    return resp.data?['id'] as String?;
   }
 }
 

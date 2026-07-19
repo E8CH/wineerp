@@ -99,8 +99,8 @@ def test_scan_unknown_barcode_empty(client):
 def test_vintages_sorted_desc_with_nv_last(client, session_factory):
     """Story 2.5 AC1 — 최신 빈티지 우선, NV(null)는 최후.
 
-    ⚠️ PostgreSQL은 DESC에서 NULL이 먼저, SQLite는 나중에 온다.
-    NULLS LAST를 명시하지 않으면 테스트만 통과하고 운영에서 NV가 맨 위로 올라온다.
+    ⚠️ 이 테스트만으로는 부족하다 — SQLite는 DESC에서 NULL이 원래 마지막이라
+    `nullslast()`를 지워도 초록불이다. 방언 검증은 아래 컴파일 테스트가 맡는다.
     """
     with session_factory() as s:
         product = wine_crud.create_product(
@@ -119,6 +119,47 @@ def test_vintages_sorted_desc_with_nv_last(client, session_factory):
     assert resp.status_code == 200
     vintages = [v["vintage"] for v in resp.json()["products"][0]["vintages"]]
     assert vintages == [2020, 2015, 2011, None]
+
+
+def test_vintage_order_sql_is_correct_on_postgres():
+    """운영 방언(PostgreSQL)에서 실제 프로덕션 구문이 내는 SQL을 검사한다.
+
+    ⚠️ 반드시 `vintages_for_product_stmt`를 호출해야 한다. 테스트 안에서 같은 구문을
+    다시 작성하면 프로덕션 코드를 바꿔도 테스트는 자기 사본만 검사해 초록불로 남는다.
+
+    실행 테스트는 SQLite에서만 돌기 때문에 `nullslast` 회귀를 구조적으로 못 잡는다
+    (SQLite는 DESC에서 NULL이 원래 마지막). 이 테스트가 그 공백을 메운다.
+    """
+    import uuid as _uuid
+
+    from sqlalchemy.dialects import postgresql
+
+    stmt = wine_crud.vintages_for_product_stmt(_uuid.uuid4())
+    sql = " ".join(str(stmt.compile(dialect=postgresql.dialect())).split())
+    assert "ORDER BY wine_vintages.vintage DESC NULLS LAST, wine_vintages.id" in sql, (
+        f"정렬 계약이 깨졌다: {sql}"
+    )
+
+
+def test_vintage_order_is_stable_for_duplicate_years(session_factory):
+    """동점(같은 연도 2건, NV 2건)에서도 순서가 결정적이어야 한다.
+
+    같은 연도·다른 용량/수입사는 N:M 바코드 모델의 존재 이유다.
+    """
+    with session_factory() as s:
+        product = wine_crud.create_product(
+            session=s, producer="Dup", model_name="Dup Cuvée"
+        )
+        for v in (2018, None, 2021, None, 2018, 1995):
+            wine_crud.add_vintage(s, wine_product_id=product.id, vintage=v)
+        rows = [
+            (v.vintage, v.id) for v in wine_crud.get_vintages_for_product(s, product.id)
+        ]
+
+    assert [v for v, _ in rows] == [2021, 2018, 2018, 1995, None, None]
+    # 동점 구간은 id 오름차순으로 고정된다(랜덤 UUID라 삽입 순서와 무관).
+    assert rows[1][1] < rows[2][1], "같은 연도 2건이 id 순으로 고정되어야 한다"
+    assert rows[4][1] < rows[5][1], "NV 2건이 id 순으로 고정되어야 한다"
 
 
 def test_scan_requires_auth(client):

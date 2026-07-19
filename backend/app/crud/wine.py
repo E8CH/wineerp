@@ -82,19 +82,29 @@ def find_products_by_barcode(session: Session, code: str) -> list[WineProduct]:
     )
 
 
+def vintages_for_product_stmt(wine_product_id: uuid.UUID):
+    """후보 목록 조회 구문. 정렬 계약이 여기 한 곳에 산다.
+
+    ⚠️ 테스트가 이 함수를 직접 컴파일해 방언별 SQL을 검사한다. 정렬을
+    `get_vintages_for_product` 안에 인라인해 두면, 실행 테스트는 SQLite에서만 돌기 때문에
+    `nullslast` 회귀를 구조적으로 잡을 수 없다(SQLite는 DESC에서 NULL이 원래 마지막).
+
+    - `nullslast`: PostgreSQL은 DESC에서 NULL을 먼저 둔다. 빠뜨리면 운영에서만 NV가
+      목록 맨 위로 올라온다.
+    - `id` 타이브레이커: 동점(같은 연도 2건, NV 2건)의 순서가 임의가 되는 것을 막는다.
+      같은 연도·다른 용량/수입사는 N:M 바코드 모델이 존재하는 바로 그 이유이고, 거의 같은
+      두 행이 순서를 바꿔 뜨면 직원이 틀린 재고 단위로 입고한다.
+
+    순서는 UX 계약이다(첫 항목이 가장 눌릴 확률이 높음) — 프론트에서 재정렬하지 말 것.
+    """
+    return (
+        select(WineVintage)
+        .where(WineVintage.wine_product_id == wine_product_id)
+        .order_by(nullslast(desc(WineVintage.vintage)), WineVintage.id)
+    )
+
+
 def get_vintages_for_product(
     session: Session, wine_product_id: uuid.UUID
 ) -> list[WineVintage]:
-    """후보 목록용 결정적 정렬: 최신 빈티지 우선, NV(NULL)는 최후.
-
-    ⚠️ `nullslast()`는 필수. PostgreSQL은 DESC에서 NULL을 먼저, SQLite는 나중에 두므로
-    생략하면 테스트(SQLite)는 통과하고 운영(PostgreSQL)에서 NV가 목록 맨 위로 올라온다.
-    순서는 UX 계약이다(첫 항목이 가장 눌릴 확률이 높음) — 프론트에서 재정렬하지 말 것.
-    """
-    return list(
-        session.exec(
-            select(WineVintage)
-            .where(WineVintage.wine_product_id == wine_product_id)
-            .order_by(nullslast(desc(WineVintage.vintage)))
-        ).all()
-    )
+    return list(session.exec(vintages_for_product_stmt(wine_product_id)).all())

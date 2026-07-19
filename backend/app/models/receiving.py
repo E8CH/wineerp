@@ -12,11 +12,23 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, SQLModel
 
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def _tz_column(*, index: bool = False, nullable: bool = False) -> Column:
+    """`_utcnow()`가 aware datetime을 돌려주므로 컬럼도 timestamptz여야 한다.
+
+    SQLModel 기본 `datetime`은 TIMESTAMP WITHOUT TIME ZONE으로 생성되어
+    마이그레이션(0003, timezone=True)과 어긋난다. 어긋난 채로 두면 운영은 오프셋을
+    보존하고 테스트(SQLite)는 잃어버려 와이어 포맷이 갈리고, autogenerate는 매번
+    허위 타입 변경 diff를 낸다.
+    """
+    return Column(DateTime(timezone=True), index=index, nullable=nullable)
 
 
 class ReceivingRecord(SQLModel, table=True):
@@ -27,8 +39,13 @@ class ReceivingRecord(SQLModel, table=True):
         foreign_key="wine_vintages.id", index=True, nullable=False
     )
     quantity: int = Field(nullable=False)
-    received_at: datetime = Field(default_factory=_utcnow, index=True, nullable=False)
+    received_at: datetime = Field(
+        default_factory=_utcnow, sa_column=_tz_column(index=True)
+    )
     staff_id: uuid.UUID = Field(foreign_key="users.id", index=True, nullable=False)
     memo: str | None = None  # FR12 — 입력 UI는 Story 4.3
-    deleted_at: datetime | None = Field(default=None, index=True)  # soft-delete 전용
-    created_at: datetime = Field(default_factory=_utcnow, nullable=False)
+    # soft-delete 전용 (AR6). 하드삭제 금지.
+    deleted_at: datetime | None = Field(
+        default=None, sa_column=_tz_column(index=True, nullable=True)
+    )
+    created_at: datetime = Field(default_factory=_utcnow, sa_column=_tz_column())

@@ -19,8 +19,13 @@ class ScannerOverlay extends ConsumerStatefulWidget {
 }
 
 class _ScannerOverlayState extends ConsumerState<ScannerOverlay> {
+  // ⚠️ DetectionSpeed.noDuplicates를 쓰지 말 것.
+  // 그 중복 제거는 네이티브 계층에 있고 컨트롤러 수명 동안 마지막 값을 붙들기 때문에,
+  // 입고 완료 후 `ScanController.reset()`을 해도 **같은 와인 두 번째 병이 인식되지 않는다**
+  // (앱 계층만 리셋되고 네이티브는 그대로). 같은 와인 여러 병은 가장 흔한 경우다.
+  // 디바운스는 `ScanController._lastAccepted` 한 곳에서만 관리한다.
   final MobileScannerController _controller = MobileScannerController(
-    detectionSpeed: DetectionSpeed.noDuplicates,
+    detectionSpeed: DetectionSpeed.normal,
   );
 
   @override

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -64,13 +65,24 @@ class ReceivingController extends Notifier<ReceivingState> {
       _resetScanLoop();
       state = const ReceivingState();
       return true;
-    } catch (_) {
-      state = state.copyWith(
-        phase: ReceivingPhase.error,
-        error: '입고 저장 실패 · 다시 시도하세요',
-      );
+    } on DioException catch (e) {
+      state = state.copyWith(phase: ReceivingPhase.error, error: _message(e));
       return false;
     }
+    // ⚠️ DioException 외의 예외는 삼키지 않는다. 파싱 오류·타입 오류를 "저장 실패"로
+    // 표시하면 직원이 재시도해 입고가 2건이 되고, 진짜 버그는 현장에서 영영 드러나지 않는다.
+  }
+
+  /// 재시도가 의미 있는 실패와 그렇지 않은 실패를 구분한다.
+  /// "다시 시도하세요"를 무조건 띄우면 만료된 토큰으로 영원히 재시도하게 된다.
+  static String _message(DioException e) {
+    final status = e.response?.statusCode;
+    if (status == 401) return '로그인이 만료되었습니다 · 다시 로그인하세요';
+    if (status == 404) return '해당 와인을 찾을 수 없습니다 · 다시 스캔하세요';
+    if (status != null && status >= 400 && status < 500) {
+      return '입고 정보가 올바르지 않습니다';
+    }
+    return '입고 저장 실패 · 네트워크 확인 후 다시 시도하세요';
   }
 
   /// 다음 병을 받을 수 있도록 스캔 루프를 초기화한다.

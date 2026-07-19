@@ -12,10 +12,14 @@ import 'package:wineerp_app/features/scan/scan_controller.dart';
 
 /// Story 2.6 — 수량 지정 & 입고 완료.
 class _FakeReceivingRepo extends ReceivingRepository {
-  _FakeReceivingRepo({this.fail = false, this.delay = Duration.zero})
-      : super(Dio());
+  _FakeReceivingRepo({
+    this.fail = false,
+    this.delay = Duration.zero,
+    this.statusCode,
+  }) : super(Dio());
 
   final bool fail;
+  final int? statusCode;
   final Duration delay;
   int calls = 0;
 
@@ -27,7 +31,20 @@ class _FakeReceivingRepo extends ReceivingRepository {
   }) async {
     calls++;
     if (delay > Duration.zero) await Future<void>.delayed(delay);
-    if (fail) throw Exception('network');
+    if (fail) {
+      // 실제 실패는 DioException으로 온다. 일반 Exception을 던지면 컨트롤러가
+      // 의도대로 되던지므로(프로그래밍 오류를 숨기지 않기 위해) fake도 현실을 따른다.
+      final req = RequestOptions(path: '/receiving');
+      throw DioException(
+        requestOptions: req,
+        type: statusCode == null
+            ? DioExceptionType.connectionError
+            : DioExceptionType.badResponse,
+        response: statusCode == null
+            ? null
+            : Response<dynamic>(requestOptions: req, statusCode: statusCode),
+      );
+    }
     return 'rec-1';
   }
 }
@@ -131,18 +148,60 @@ void main() {
           reason: '같은 와인 여러 병 입고는 가장 흔한 경우다');
     });
 
-    testWidgets('[완료] 연타로 중복 입고되지 않는다', (tester) async {
+    testWidgets('[완료] 연타로 중복 입고되지 않는다 (같은 프레임)', (tester) async {
+      // ⚠️ 탭 사이에 pump()를 넣으면 안 된다. 리빌드가 일어나 두 번째 탭 시점엔
+      // 이미 버튼이 비활성이므로, UI 비활성만 검증하고 컨트롤러 가드는 한 번도
+      // 실행되지 않는다. 실제 연타는 리빌드 전 같은 프레임에 도달한다.
       final repo = _FakeReceivingRepo(delay: const Duration(milliseconds: 300));
       await tester.pumpWidget(_host(_container(repo)));
 
-      await tester.tap(find.byKey(const Key('receiving_complete')));
-      await tester.pump();
-      await tester.tap(find.byKey(const Key('receiving_complete')));
-      await tester.tap(find.byKey(const Key('receiving_complete')));
+      final btn = find.byKey(const Key('receiving_complete'));
+      await tester.tap(btn);
+      await tester.tap(btn, warnIfMissed: false);
+      await tester.tap(btn, warnIfMissed: false);
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(seconds: 3));
 
       expect(repo.calls, 1, reason: '중복 입고는 재고를 조용히 부풀린다');
+    });
+
+    testWidgets('컨트롤러 재진입 가드 단독 검증', (tester) async {
+      // UI 비활성을 우회해 가드만 격리 검증한다. 위젯을 거치지 않으므로
+      // 버튼 비활성을 지워도 이 테스트는 계속 결함을 잡는다.
+      final repo = _FakeReceivingRepo(delay: const Duration(milliseconds: 200));
+      final c = _container(repo);
+      final ctrl = c.read(receivingControllerProvider.notifier);
+
+      final futures = [ctrl.submit('v1'), ctrl.submit('v1'), ctrl.submit('v1')];
+      await tester.pump(const Duration(milliseconds: 300));
+      await Future.wait(futures);
+
+      expect(repo.calls, 1);
+    });
+
+    test('스캔 대상이 바뀌면 이전 수량이 따라가지 않는다', () async {
+      // 확인 패널이 떠 있는 동안 카메라는 계속 살아 있다. 와인 A에 12를 찍어둔 채
+      // 와인 B가 프레임에 들어오면, 리셋하지 않을 경우 B가 12병으로 기록된다.
+      final c = _container(_FakeReceivingRepo());
+      final ctrl = c.read(receivingControllerProvider.notifier);
+      ctrl.setQuantity(12);
+      expect(c.read(receivingControllerProvider).quantity, 12);
+
+      c.invalidate(receivingControllerProvider); // ScanScreen._match이 하는 일
+      await Future<void>.delayed(Duration.zero);
+      expect(c.read(receivingControllerProvider).quantity, 1,
+          reason: '다른 와인에 이전 수량이 새면 조용한 오기록이 된다');
+    });
+
+    testWidgets('401은 재시도가 아니라 재로그인을 안내한다', (tester) async {
+      // "다시 시도하세요"를 무조건 띄우면 만료 토큰으로 영원히 재시도하게 된다.
+      await tester.pumpWidget(
+        _host(_container(_FakeReceivingRepo(fail: true, statusCode: 401))),
+      );
+      await tester.tap(find.byKey(const Key('receiving_complete')));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('로그인이 만료되었습니다 · 다시 로그인하세요'), findsOneWidget);
     });
 
     testWidgets('실패 시 스캔으로 돌아가지 않고 수량을 유지한다', (tester) async {
@@ -159,7 +218,8 @@ void main() {
       await tester.pump();
       await tester.pump();
 
-      expect(find.text('입고 저장 실패 · 다시 시도하세요'), findsOneWidget);
+      expect(find.text('입고 저장 실패 · 네트워크 확인 후 다시 시도하세요'),
+          findsOneWidget);
       expect(c.read(receivingControllerProvider).quantity, 3, reason: '다시 세게 하지 않는다');
       expect(c.read(selectedCandidateProvider), 'v1', reason: '선택 유지');
     });

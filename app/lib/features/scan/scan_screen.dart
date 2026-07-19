@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/scan_models.dart';
 import '../../data/scan_repository.dart';
+import '../receiving/receiving_controller.dart';
 import '../receiving/widgets/candidate_list.dart';
 import '../receiving/widgets/receiving_panel.dart';
 import 'scan_controller.dart';
@@ -14,9 +15,13 @@ class ScanScreen extends ConsumerWidget {
 
   Future<void> _match(WidgetRef ref, String code) async {
     ref.read(matchProvider.notifier).state = const AsyncLoading();
-    // 다음 병으로 넘어갈 때 이전 선택이 남으면 안 된다 — matchProvider는 루트
-    // 프로바이더라 자동 리셋되지 않으므로 명시적으로 지운다.
+    // 다음 병으로 넘어갈 때 이전 상태가 남으면 안 된다 — 셋 다 루트 프로바이더라
+    // 자동 리셋되지 않는다.
     ref.read(selectedCandidateProvider.notifier).state = null;
+    // ⚠️ 수량·오류도 반드시 함께 버린다. 확인 패널이 떠 있는 동안 카메라는 계속 살아
+    // 있으므로, 와인 A에 12를 찍어둔 채 와인 B가 프레임에 들어오면 카드만 B로 바뀌고
+    // 스테퍼는 12로 남는다 → [완료] 시 B가 12병 기록된다(조용한 오기록).
+    ref.invalidate(receivingControllerProvider);
     try {
       final result = await ref.read(scanRepositoryProvider).scan(code);
       ref.read(matchProvider.notifier).state = AsyncData(result);
@@ -38,11 +43,24 @@ class ScanScreen extends ConsumerWidget {
             ScannerOverlay(onNewCode: (code) => _match(ref, code))
           else
             const _CameraPlaceholder(),
+          // ⚠️ 높이를 제한하고 스크롤을 준다. `Positioned(left/right/bottom)`만 주면
+          // maxHeight가 무한이라, 큰 글꼴(200%)에서 패널이 Stack 위로 자라 조용히
+          // 잘린다 — 오버플로 경고도 없이 "어떤 와인인지" 보여주는 카드만 사라지고
+          // [완료]는 그대로 눌린다. 확인 단계에서 최악의 실패 모양이다.
           Positioned(
             left: 12,
             right: 12,
             bottom: 12,
-            child: _MatchResult(match: match),
+            top: 12,
+            child: SafeArea(
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: SingleChildScrollView(
+                  reverse: true, // 넘칠 때 하단 액션이 먼저 보이도록
+                  child: _MatchResult(match: match),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -87,9 +105,17 @@ class _MatchResult extends ConsumerWidget {
         }
 
         final selectedId = ref.watch(selectedCandidateProvider);
-        if (selectedId == null) {
+        // 선택 id가 이번 결과에 없으면(직전 스캔의 잔여 선택 등) 목록으로 되돌린다.
+        // 임의 후보로 폴백하면 직원이 고르지 않은 와인이 고른 것과 구별되지 않는 모습으로
+        // 확정된다 — 충돌보다 나쁘다.
+        final selected = selectedId == null
+            ? null
+            : candidates.where((c) => c.id == selectedId).firstOrNull;
+
+        if (selected == null) {
           return CandidateList(
             candidates: candidates,
+            selectedId: selectedId,
             onSelect: (c) =>
                 ref.read(selectedCandidateProvider.notifier).state = c.id,
             onNotListed: () =>
@@ -99,10 +125,6 @@ class _MatchResult extends ConsumerWidget {
           );
         }
 
-        final selected = candidates.firstWhere(
-          (c) => c.id == selectedId,
-          orElse: () => candidates.first,
-        );
         return _ConfirmFor(candidate: selected, canReselect: true);
       },
     );
