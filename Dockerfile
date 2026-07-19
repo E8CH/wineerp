@@ -18,4 +18,7 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY backend/ .
 
 ENV PORT=8000
+# ⚠️ EXPOSE는 문서용이 아니다. Railway가 타깃 포트를 이걸로 감지한다 —
+# 없으면 헬스체크가 엉뚱한 포트를 두드리고 "service unavailable"만 반복한다.
+EXPOSE 8000
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
