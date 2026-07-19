@@ -198,3 +198,119 @@ def test_empty_period_returns_zero_buckets_not_error(client, engine):
     assert body["total_quantity"] == 0
     assert body["top_products"] == []
     assert all(b["quantity"] == 0 for b in body["buckets"])
+
+
+# --- Story 5.2: 엑셀 다운로드 ---------------------------------------------------
+
+
+def _xlsx(client, token, **params):
+    return client.get(f"{API}/reports/receiving.xlsx", params=params, headers=_h(token))
+
+
+def _sheet(resp):
+    import io as _io
+
+    from openpyxl import load_workbook
+
+    return load_workbook(_io.BytesIO(resp.content)).active
+
+
+def test_xlsx_requires_manager(client, engine):
+    assert _xlsx(client, _token(client), period="week").status_code == 403
+    assert _xlsx(client, _manager(client, engine), period="week").status_code == 200
+
+
+def test_xlsx_requires_auth(client):
+    assert client.get(f"{API}/reports/receiving.xlsx").status_code == 401
+
+
+def test_xlsx_has_correct_content_type_and_filename(client, engine):
+    resp = _xlsx(client, _manager(client, engine), period="week", anchor="2026-07-15")
+    assert (
+        resp.headers["content-type"]
+        == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    # ASCII 파일명 — 한글은 Content-Disposition에서 클라이언트마다 처리가 갈린다.
+    disposition = resp.headers["content-disposition"]
+    assert "wineerp-receiving-2026-07-13_2026-07-19.xlsx" in disposition
+    assert disposition.isascii()
+
+
+def test_xlsx_contains_headers_and_rows(client, engine):
+    staff = _token(client)
+    vid, sid = _vids(client, staff)[0], _staff_id(client, staff)
+    _insert(
+        engine, vid=vid, sid=sid, at=datetime(2026, 7, 15, 3, 0, tzinfo=UTC), qty=7
+    )
+
+    resp = _xlsx(client, _manager(client, engine), period="week", anchor="2026-07-15")
+    ws = _sheet(resp)
+    headers = [c.value for c in ws[1]]
+    assert headers == ["입고일시", "모델명", "생산자", "빈티지", "수량", "담당자", "구분", "메모"]
+
+    row = [c.value for c in ws[2]]
+    assert row[1] == "Château Margaux"
+    assert row[4] == 7
+    assert row[6] == "입고"
+
+
+def test_xlsx_datetime_is_kst_not_utc(client, engine):
+    """🔴 Excel 셀에는 시간대가 없다 — UTC를 그대로 쓰면 오전 입고가 전날로 보인다."""
+    staff = _token(client)
+    vid, sid = _vids(client, staff)[0], _staff_id(client, staff)
+    # KST 2026-07-15 08:00 == UTC 2026-07-14 23:00
+    _insert(
+        engine, vid=vid, sid=sid, at=datetime(2026, 7, 14, 23, 0, tzinfo=UTC), qty=1
+    )
+
+    resp = _xlsx(client, _manager(client, engine), period="week", anchor="2026-07-15")
+    ws = _sheet(resp)
+    assert ws.cell(row=2, column=1).value == "2026-07-15 08:00"
+
+
+def test_xlsx_writes_nv_not_blank(client, engine):
+    """빈칸이면 "빠뜨린 값"으로 읽힌다 — NV는 유효 상태다."""
+    staff = _token(client)
+    mgr = _manager(client, engine)
+    nv_vid = client.post(
+        f"{API}/scan", json={"code": "3185370000060"}, headers=_h(staff)
+    ).json()["products"][0]["vintages"][0]["id"]
+    _insert(
+        engine,
+        vid=nv_vid,
+        sid=_staff_id(client, staff),
+        at=datetime(2026, 7, 15, 3, 0, tzinfo=UTC),
+        qty=2,
+    )
+    ws = _sheet(_xlsx(client, mgr, period="week", anchor="2026-07-15"))
+    assert ws.cell(row=2, column=4).value == "NV"
+
+
+def test_xlsx_respects_period_filter(client, engine):
+    """파일은 선택된 기간 필터를 그대로 반영한다(에픽 AC)."""
+    staff = _token(client)
+    vid, sid = _vids(client, staff)[0], _staff_id(client, staff)
+    _insert(engine, vid=vid, sid=sid, at=datetime(2026, 7, 15, 3, 0, tzinfo=UTC), qty=1)
+    _insert(engine, vid=vid, sid=sid, at=datetime(2026, 6, 15, 3, 0, tzinfo=UTC), qty=1)
+
+    mgr = _manager(client, engine)
+    ws = _sheet(_xlsx(client, mgr, period="week", anchor="2026-07-15"))
+    assert ws.max_row == 2, "다른 달 기록이 섞이면 보고서가 틀린다"
+
+
+def test_xlsx_excludes_soft_deleted(client, engine):
+    staff = _token(client)
+    vid, sid = _vids(client, staff)[0], _staff_id(client, staff)
+    at = datetime(2026, 7, 15, 3, 0, tzinfo=UTC)
+    _insert(engine, vid=vid, sid=sid, at=at, qty=1)
+    _insert(engine, vid=vid, sid=sid, at=at, qty=99, deleted_at=datetime.now(UTC))
+
+    ws = _sheet(_xlsx(client, _manager(client, engine), period="week", anchor="2026-07-15"))
+    assert ws.max_row == 2
+
+
+def test_xlsx_empty_period_still_has_headers(client, engine):
+    """빈 기간에도 파일은 열려야 한다 — 헤더만 있는 시트."""
+    ws = _sheet(_xlsx(client, _manager(client, engine), period="week", anchor="2020-01-01"))
+    assert ws.max_row == 1
+    assert ws.cell(row=1, column=1).value == "입고일시"

@@ -42,6 +42,8 @@ dependencies:
   json_annotation: ^4.9.0    # 모델 직렬화 (snake↔camel 매핑)
   mobile_scanner: ^7.0.0     # 바코드 스캔 (ML Kit/CameraX·AVFoundation) — Story 2.2
   image_picker: ^1.2.3
+  path_provider: ^2.1.6
+  share_plus: ^13.2.1
   # image:          Story 2.3 에서 추가 (촬영 후 압축·EXIF 제거)
 
 dev_dependencies:

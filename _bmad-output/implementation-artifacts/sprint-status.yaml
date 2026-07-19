@@ -80,5 +80,5 @@ development_status:
   # Epic 5 — 리포트 & 보고
   epic-5: in-progress
   5-1-종합-리포트-그래프: review
-  5-2-엑셀-다운로드: backlog
+  5-2-엑셀-다운로드: review
   epic-5-retrospective: optional

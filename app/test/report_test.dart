@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wineerp_app/core/theme.dart';
+import 'package:wineerp_app/data/export_repository.dart';
 import 'package:wineerp_app/data/report_repository.dart';
 import 'package:wineerp_app/features/auth/auth_controller.dart';
 import 'package:wineerp_app/features/report/report_screen.dart';
@@ -21,6 +22,23 @@ class _FakeReportRepo extends ReportRepository {
     requested.add(period);
     if (fail) throw Exception('boom');
     return _report;
+  }
+}
+
+class _FakeExportRepo extends ExportRepository {
+  _FakeExportRepo({this.fail = false, this.delay = Duration.zero}) : super(Dio());
+
+  final bool fail;
+  // 즉시 완료하는 fake는 재진입 가드를 무의미하게 만든다 — 실제 HTTP는 시간이 걸린다.
+  final Duration delay;
+  final List<ReportPeriod> shared = [];
+
+  @override
+  Future<String> shareReceivingXlsx(ReportPeriod period) async {
+    shared.add(period);
+    if (delay > Duration.zero) await Future<void>.delayed(delay);
+    if (fail) throw Exception('boom');
+    return '/tmp/x.xlsx';
   }
 }
 
@@ -56,9 +74,14 @@ ReceivingReport _report({
   );
 }
 
-ProviderContainer _container(_FakeReportRepo repo, {String role = 'manager'}) {
+ProviderContainer _container(
+  _FakeReportRepo repo, {
+  String role = 'manager',
+  _FakeExportRepo? exportRepo,
+}) {
   final c = ProviderContainer(overrides: [
     reportRepositoryProvider.overrideWithValue(repo),
+    exportRepositoryProvider.overrideWithValue(exportRepo ?? _FakeExportRepo()),
     authControllerProvider.overrideWith(() => _RoleController(role)),
   ]);
   addTearDown(c.dispose);
@@ -151,6 +174,61 @@ void main() {
       await tester.tap(find.text('월간'));
       await tester.pumpAndSettle();
       expect(repo.requested.last, ReportPeriod.month);
+    });
+  });
+
+  group('엑셀 다운로드 (5.2)', () {
+    testWidgets('staff에게는 다운로드 버튼이 없다', (tester) async {
+      await tester.pumpWidget(
+        _host(_container(_FakeReportRepo(_report()), role: 'staff')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('export_xlsx')), findsNothing);
+    });
+
+    testWidgets('현재 선택된 기간으로 내보낸다', (tester) async {
+      // 파일이 화면과 다른 기간을 담으면 보고서가 틀린다(에픽 AC).
+      final exp = _FakeExportRepo();
+      final c = _container(_FakeReportRepo(_report()), exportRepo: exp);
+      await tester.pumpWidget(_host(c));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('월간'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('export_xlsx')));
+      await tester.pumpAndSettle();
+
+      expect(exp.shared, [ReportPeriod.month]);
+    });
+
+    testWidgets('연타해도 한 번만 내보낸다', (tester) async {
+      final exp = _FakeExportRepo(delay: const Duration(milliseconds: 300));
+      final c = _container(_FakeReportRepo(_report()), exportRepo: exp);
+      await tester.pumpWidget(_host(c));
+      await tester.pumpAndSettle();
+
+      final btn = find.byKey(const Key('export_xlsx'));
+      await tester.tap(btn);
+      await tester.tap(btn, warnIfMissed: false);
+      await tester.tap(btn, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      expect(exp.shared.length, 1);
+    });
+
+    testWidgets('실패하면 안내를 띄운다', (tester) async {
+      final c = _container(
+        _FakeReportRepo(_report()),
+        exportRepo: _FakeExportRepo(fail: true),
+      );
+      await tester.pumpWidget(_host(c));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('export_xlsx')));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.textContaining('엑셀 생성 실패'), findsOneWidget);
     });
   });
 }

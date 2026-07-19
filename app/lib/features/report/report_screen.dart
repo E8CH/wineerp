@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme.dart';
+import '../../data/export_repository.dart';
 import '../../data/report_repository.dart';
 import '../auth/auth_controller.dart';
 import 'widgets/report_bar_chart.dart';
@@ -22,7 +23,13 @@ class ReportScreen extends ConsumerWidget {
     final report = ref.watch(reportProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('리포트')),
+      appBar: AppBar(
+        title: const Text('리포트'),
+        actions: [
+          // 파일은 화면과 **같은 기간**을 반영한다(에픽 AC).
+          _ExportButton(period: period, enabled: !report.isLoading),
+        ],
+      ),
       body: Column(
         children: [
           Padding(
@@ -69,6 +76,57 @@ class ReportScreen extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 엑셀 다운로드 → 공유 시트(FR11).
+class _ExportButton extends ConsumerStatefulWidget {
+  const _ExportButton({required this.period, required this.enabled});
+
+  final ReportPeriod period;
+  final bool enabled;
+
+  @override
+  ConsumerState<_ExportButton> createState() => _ExportButtonState();
+}
+
+class _ExportButtonState extends ConsumerState<_ExportButton> {
+  bool _busy = false;
+
+  Future<void> _export() async {
+    if (_busy) return; // 연타로 다운로드가 중복되지 않게
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(exportRepositoryProvider)
+          .shareReceivingXlsx(widget.period);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..clearSnackBars()
+          ..showSnackBar(
+            const SnackBar(content: Text('엑셀 생성 실패 · 다시 시도하세요')),
+          );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      key: const Key('export_xlsx'),
+      tooltip: '엑셀 다운로드',
+      onPressed: widget.enabled && !_busy ? _export : null,
+      icon: _busy
+          ? const SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            )
+          : const Icon(Icons.download_outlined),
     );
   }
 }
