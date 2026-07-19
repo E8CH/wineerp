@@ -18,6 +18,10 @@ def normalize_db_url(url: str | None) -> str | None:
     return url
 
 
+# 이 값이 프로덕션에 남으면 누구나 유효한 JWT를 만들 수 있다 — 인증이 없는 것과 같다.
+DEFAULT_SECRET_KEY = "change-me-in-env"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env"),  # backend/.env 우선, 루트 .env 폴백
@@ -33,7 +37,7 @@ class Settings(BaseSettings):
     TIMEZONE: str = "Asia/Seoul"
 
     # --- 보안 (Story 1.3에서 실사용) ---
-    SECRET_KEY: str = "change-me-in-env"
+    SECRET_KEY: str = DEFAULT_SECRET_KEY
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
     # --- 데이터베이스 ---
@@ -61,6 +65,20 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str | None = None
     R2_BUCKET: str | None = None
     IMAGE_STORAGE_DIR: str = "_local_storage"  # 로컬 어댑터 저장 경로
+
+    def assert_production_ready(self) -> None:
+        """프로덕션에서 기본 시크릿으로 뜨는 것을 막는다.
+
+        ⚠️ `SECRET_KEY`가 기본값이면 저장소를 본 누구나 유효한 JWT를 서명할 수 있다 —
+        인증이 없는 것과 같다. 앱 쪽 `Env.assertConfigured()`와 같은 이유로,
+        배포 산출물이 아니라 **부팅 시점**에 못 박는다. 조용히 뜨는 것이 최악이다.
+        """
+        if self.ENVIRONMENT == "production" and self.SECRET_KEY == DEFAULT_SECRET_KEY:
+            raise RuntimeError(
+                "ENVIRONMENT=production인데 SECRET_KEY가 기본값입니다. "
+                "이 키로 서명된 JWT는 누구나 위조할 수 있습니다. "
+                "배포 환경에 임의의 SECRET_KEY를 설정하세요."
+            )
 
     @property
     def r2_configured(self) -> bool:

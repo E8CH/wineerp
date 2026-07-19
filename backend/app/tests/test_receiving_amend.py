@@ -224,10 +224,30 @@ def test_cancelled_record_drops_out_of_history(client, engine):
     assert all(item["id"] != rec["id"] for item in body["data"])
 
 
-def test_no_hard_delete_function_exists():
-    """AR6 — 하드삭제 경로를 아예 만들지 않는 것이 규칙을 지키는 방법이다."""
-    names = dir(receiving_crud)
-    assert not any("hard" in n or n == "delete_record" for n in names)
+def test_no_hard_delete_path_exists_anywhere():
+    """AR6 — 하드삭제 경로가 코드베이스 어디에도 없어야 한다.
+
+    ⚠️ 이전 버전은 `dir(receiving_crud)`에서 "hard"라는 **이름**만 찾는 린트였다.
+    `purge_record()`라는 이름으로 `session.delete()`를 추가하면 그대로 통과했다
+    (코드리뷰에서 실증됨). 이름이 아니라 **호출**을 찾는다.
+    """
+    import pathlib
+
+    app_dir = pathlib.Path(__file__).resolve().parents[1]
+    offenders = []
+    for path in app_dir.rglob("*.py"):
+        if "tests" in path.parts:
+            continue
+        for lineno, line in enumerate(
+            path.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if "session.delete(" in line or ".delete(synchronize_session" in line:
+                offenders.append(f"{path.relative_to(app_dir)}:{lineno}: {line.strip()}")
+
+    assert not offenders, (
+        "하드삭제 호출이 있습니다. 입고 기록은 5년 보존 대상이며 soft-delete만 "
+        "허용됩니다(AR6): " + " | ".join(offenders)
+    )
 
 
 # --- Story 4.3: 메모 ----------------------------------------------------------

@@ -37,6 +37,10 @@ class ReceivingRead(BaseModel):
     received_at: datetime
     staff_id: uuid.UUID
     memo: str | None
+    # ⚠️ 취소 여부를 반드시 실어 보낸다. 멱등 재생은 취소된 레코드도 찾아내는데
+    # (되살리면 안 되므로 의도한 동작), 이 필드가 없으면 응답이 성공과 똑같이 보인다.
+    # 앱은 "입고 완료 10병"을 띄우고 실제 재고는 0이 된다.
+    deleted_at: datetime | None = None
 
 
 class ReceivingHistoryItem(BaseModel):

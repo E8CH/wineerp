@@ -21,6 +21,30 @@ from app.core.config import settings
 HEADERS = ["입고일시", "모델명", "생산자", "빈티지", "수량", "담당자", "구분", "메모"]
 _SOURCE_LABEL = {"receiving": "입고", "initial_setup": "초기 세팅"}
 
+# Excel이 수식으로 해석하는 선두 문자. 메모는 직원 자유 입력이고 모델명은 LLM이
+# 라벨에서 읽은 값이라 둘 다 통제 밖이다.
+_FORMULA_LEADS = ("=", "+", "-", "@")
+
+# openpyxl이 거부하는 제어문자. 메모 한 건에 섞이면 그 기간 엑셀 전체가 500이 된다.
+_ILLEGAL = {c: None for c in range(0x20) if c not in (0x09, 0x0A, 0x0D)}
+
+
+def _safe_text(value: str | None) -> str:
+    """엑셀 셀에 넣어도 안전한 문자열로 만든다.
+
+    ⚠️ 수식 주입 방어. openpyxl은 `=`로 시작하는 문자열을 **수식으로 분류**한다.
+    `=cmd|'/c calc'!A0`는 관리자에게 프로세스 실행을 묻고, `=SUM(`은 파일 전체를
+    "복구할까요?"로 만들며, `=A1*1000`은 메모 칸에 **가짜 숫자**를 렌더한다 —
+    재고 문서에서 최악이다. 회장에게 첨부되는 파일이므로 선두를 무력화한다.
+    """
+    if not value:
+        return ""
+    text = str(value).translate(_ILLEGAL)
+    if text.startswith(_FORMULA_LEADS):
+        # 선행 아포스트로피는 Excel에서 "이건 텍스트"라는 표준 표기다.
+        return "'" + text
+    return text
+
 
 def build_receiving_workbook(rows: list[tuple]) -> bytes:
     """`crud.receiving.list_records` 결과를 엑셀 바이트로."""
@@ -43,14 +67,14 @@ def build_receiving_workbook(rows: list[tuple]) -> bytes:
         ws.append(
             [
                 received.astimezone(tz).strftime("%Y-%m-%d %H:%M"),
-                product.model_name,
-                product.producer,
+                _safe_text(product.model_name),
+                _safe_text(product.producer),
                 # NV는 빈칸이 아니라 "NV"로 쓴다 — 빈칸이면 "빠뜨린 값"으로 읽힌다.
                 vintage.vintage if vintage.vintage is not None else "NV",
-                rec.quantity,
-                user.email,
+                rec.quantity,  # 숫자 셀로 들어가야 한다(집계 대상)
+                _safe_text(user.email),
                 _SOURCE_LABEL.get(str(rec.source), str(rec.source)),
-                rec.memo or "",
+                _safe_text(rec.memo),
             ]
         )
 

@@ -1,6 +1,8 @@
 """라벨 추론 입출력 스키마 (FR6 지원)."""
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -8,7 +10,11 @@ class LabelInferenceRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     image_key: str = Field(max_length=512)
-    content_type: str = "image/jpeg"
+    # ⚠️ 자유 문자열이면 안 된다. 이 값은 Gemini의 `inline_data.mime_type`과
+    # OpenAI의 `data:` URL에 **그대로 실려** 벤더로 나간다. 자유 입력이면 인증된
+    # 클라이언트가 임의 텍스트를 페이로드에 주입할 수 있고, 그건 AR9가 타입으로
+    # 닫았다고 주장한 바로 그 통로다. 허용목록으로 좁힌다.
+    content_type: Literal["image/jpeg", "image/png", "image/webp"] = "image/jpeg"
 
 
 class InferenceRead(BaseModel):

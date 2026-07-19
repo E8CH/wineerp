@@ -6,6 +6,9 @@ from fastapi import FastAPI
 from app.api.main import api_router
 from app.core.config import settings
 
+# 기본 시크릿으로 프로덕션이 뜨지 않게 한다(부팅 실패가 조용한 인증 우회보다 낫다).
+settings.assert_production_ready()
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_PREFIX}/openapi.json",

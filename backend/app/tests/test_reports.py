@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import uuid as _uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -314,3 +314,72 @@ def test_xlsx_empty_period_still_has_headers(client, engine):
     ws = _sheet(_xlsx(client, _manager(client, engine), period="week", anchor="2020-01-01"))
     assert ws.max_row == 1
     assert ws.cell(row=1, column=1).value == "입고일시"
+
+
+def test_memo_starting_with_equals_is_not_a_formula(client, engine):
+    """🔴 Excel은 '='로 시작하는 문자열을 수식으로 분류한다.
+
+    메모는 직원 자유 입력이고 이 파일은 관리자가 열어 회장에게 전달한다.
+    `=cmd|'/c calc'!A0`는 프로세스 실행을 묻고, `=SUM(`은 파일 전체를 복구 대상으로
+    만들며, `=A1*1000`은 메모 칸에 가짜 숫자를 렌더한다.
+    """
+    staff = _token(client)
+    vid, sid = _vids(client, staff)[0], _staff_id(client, staff)
+    _insert(
+        engine, vid=vid, sid=sid, at=datetime(2026, 7, 15, 3, 0, tzinfo=UTC), qty=1,
+        memo="=cmd|'/c calc'!A0",
+    )
+    ws = _sheet(_xlsx(client, _manager(client, engine), period="week", anchor="2026-07-15"))
+    cell = ws.cell(row=2, column=8)
+    assert cell.data_type == "s", "수식으로 분류되면 안 된다"
+    assert cell.value.startswith("'="), "선행 아포스트로피로 무력화한다"
+
+
+def test_quantity_stays_a_number_cell(client, engine):
+    """수량은 집계 대상이므로 문자열이 되면 안 된다."""
+    staff = _token(client)
+    vid, sid = _vids(client, staff)[0], _staff_id(client, staff)
+    _insert(engine, vid=vid, sid=sid, at=datetime(2026, 7, 15, 3, 0, tzinfo=UTC), qty=42)
+    ws = _sheet(_xlsx(client, _manager(client, engine), period="week", anchor="2026-07-15"))
+    assert ws.cell(row=2, column=5).data_type == "n"
+    assert ws.cell(row=2, column=5).value == 42
+
+
+def test_control_character_in_memo_does_not_500_the_export(client, engine):
+    """메모 한 건의 제어문자가 그 기간 엑셀 전체를 영구히 500으로 만들면 안 된다."""
+    staff = _token(client)
+    vid, sid = _vids(client, staff)[0], _staff_id(client, staff)
+    _insert(
+        engine, vid=vid, sid=sid, at=datetime(2026, 7, 15, 3, 0, tzinfo=UTC), qty=1,
+        memo="파손\x0b확인",
+    )
+    resp = _xlsx(client, _manager(client, engine), period="week", anchor="2026-07-15")
+    assert resp.status_code == 200
+    assert _sheet(resp).cell(row=2, column=8).value == "파손확인"
+
+
+def test_top_products_order_is_deterministic_on_ties(client, engine):
+    """동점에서 producer까지 비교하지 않으면 방언마다 5위가 달라진다."""
+    from app.core.timeframe import Period, period_bounds
+    from app.crud import report as report_crud
+    from app.crud import wine as wine_crud
+
+    staff = _token(client)
+    sid = _staff_id(client, staff)
+    at = datetime(2026, 7, 15, 3, 0, tzinfo=UTC)
+    with Session(engine) as s:
+        for producer in ("B Estate", "A Estate"):
+            p = wine_crud.create_product(session=s, producer=producer, model_name="Same Name")
+            v = wine_crud.add_vintage(s, wine_product_id=p.id, vintage=2020)
+            s.add(
+                ReceivingRecord(
+                    wine_vintage_id=v.id, staff_id=_uuid.UUID(sid), quantity=5, received_at=at
+                )
+            )
+        s.commit()
+        start, end = period_bounds(Period.week, date(2026, 7, 15))
+        first = report_crud.receiving_report(s, start=start, end=end)["top_products"]
+        second = report_crud.receiving_report(s, start=start, end=end)["top_products"]
+
+    assert first == second
+    assert [p["producer"] for p in first[:2]] == ["A Estate", "B Estate"]

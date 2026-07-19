@@ -63,7 +63,9 @@ def receiving_report(
         buckets.append({"date": key, "quantity": per_day.get(key, 0)})
         cursor += timedelta(days=1)
 
-    top = sorted(per_product.items(), key=lambda kv: (-kv[1], kv[0][0]))
+    # 동점에서 model_name만 비교하면 producer가 다른 동명 제품이 같다고 판정되고,
+    # 그 뒤는 DB 행 순서(ORDER BY 없음)라 SQLite/PostgreSQL이 서로 다른 5위를 낸다.
+    top = sorted(per_product.items(), key=lambda kv: (-kv[1], kv[0][0], kv[0][1]))
     return {
         "buckets": buckets,
         "top_products": [

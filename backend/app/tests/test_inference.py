@@ -234,4 +234,24 @@ def test_adapter_receives_only_image_bytes(client):
     token = _token(client)
     assert _infer(client, token).status_code == 200
     assert seen["image"] == b"fake-jpeg-bytes"
-    assert set(seen) == {"image", "content_type"}
+    # ⚠️ 이전 버전은 `set(seen) == {"image","content_type"}`만 봤는데, 스파이가 그 두 키만
+    # 쓰므로 **절대 실패할 수 없는** 단언이었다. content_type에 거래처·매입가를 이어붙여도
+    # 통과했다(코드리뷰에서 실증됨). 값 자체를 고정한다.
+    assert seen["content_type"] == "image/jpeg"
+
+
+def test_content_type_is_allowlisted_not_free_text(client):
+    """자유 문자열이면 인증된 클라이언트가 벤더 페이로드에 임의 텍스트를 넣을 수 있다.
+
+    이 값은 Gemini `inline_data.mime_type`과 OpenAI `data:` URL로 그대로 나간다(AR9).
+    """
+    token = _token(client)
+    resp = client.post(
+        f"{API}/inference/label",
+        json={
+            "image_key": "labels/a.jpg",
+            "content_type": "image/jpeg; supplier=ACME; unit_cost=180000",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 422
