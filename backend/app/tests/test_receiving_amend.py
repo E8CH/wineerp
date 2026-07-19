@@ -358,3 +358,57 @@ def test_memo_length_limit(client):
         headers=_h(token),
     )
     assert resp.status_code == 422
+
+
+# --- 교차 수정 귀속 (코드리뷰 이월: IDOR 오귀속) --------------------------------
+
+
+def test_another_staff_can_amend_and_history_shows_who(client, engine):
+    """staff끼리 수정은 **의도된 설계**(Story 4.2)지만, 화면이 그 사실을 숨기면 안 된다.
+
+    🔴 이전에는 내역이 `staff_email`(최초 입고자)만 보여줘서, bob이 고친 수량이
+    alice의 이름으로 표시됐다. 감사 행은 남지만 어떤 화면에도 노출되지 않아
+    사실상 복구 불가능한 오귀속이었다.
+    """
+    alice = _token(client, "alice@wineerp.co")
+    rec = _make_record(client, alice)  # alice가 12병 입고
+
+    bob = _token(client, "bob@wineerp.co")
+    resp = client.patch(
+        f"{API}/receiving/{rec['id']}",
+        json={"quantity": 3, "reason": "재확인"},
+        headers=_h(bob),
+    )
+    assert resp.status_code == 200, "교차 수정은 허용된 설계다"
+
+    item = client.get(
+        f"{API}/receiving", params={"period": "month"}, headers=_h(alice)
+    ).json()["data"][0]
+
+    assert item["staff_email"] == "alice@wineerp.co", "입고자는 여전히 alice"
+    assert item["quantity"] == 3
+    assert item["amended_by"] == "bob@wineerp.co", "고친 사람이 드러나야 한다"
+
+
+def test_unamended_record_has_no_amender(client, engine):
+    alice = _token(client, "alice@wineerp.co")
+    _make_record(client, alice)
+    item = client.get(
+        f"{API}/receiving", params={"period": "month"}, headers=_h(alice)
+    ).json()["data"][0]
+    assert item["amended_by"] is None
+
+
+def test_history_shows_the_latest_amender_not_the_first(client, engine):
+    alice = _token(client, "alice@wineerp.co")
+    rec = _make_record(client, alice)
+    bob = _token(client, "bob@wineerp.co")
+    carol = _token(client, "carol@wineerp.co")
+
+    client.patch(f"{API}/receiving/{rec['id']}", json={"quantity": 9}, headers=_h(bob))
+    client.patch(f"{API}/receiving/{rec['id']}", json={"quantity": 4}, headers=_h(carol))
+
+    item = client.get(
+        f"{API}/receiving", params={"period": "month"}, headers=_h(alice)
+    ).json()["data"][0]
+    assert item["amended_by"] == "carol@wineerp.co"

@@ -190,3 +190,24 @@ def list_amendments(
             .order_by(ReceivingAmendment.changed_at)
         ).all()
     )
+
+
+def last_amendments_for(
+    session: Session, record_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[datetime, str]]:
+    """레코드별 **마지막** 수정 정보 (시각, 수정자 이메일).
+
+    ⚠️ 내역 화면이 `staff_email`(최초 입고자)만 보여주면, 다른 직원이 수량을 고쳤을 때
+    **원 입고자 이름 옆에 남의 수량**이 뜬다. 수정 권한을 누구에게나 준 것은 의도지만
+    (Story 4.2), 그 사실이 화면에 없으면 기록이 조용히 오귀속된다.
+    """
+    if not record_ids:
+        return {}
+    rows = session.exec(
+        select(ReceivingAmendment, User)
+        .join(User, ReceivingAmendment.changed_by == User.id)
+        .where(ReceivingAmendment.receiving_record_id.in_(record_ids))
+        .order_by(ReceivingAmendment.changed_at)
+    ).all()
+    # 정렬이 오름차순이므로 뒤에 오는 것이 최종본이다.
+    return {a.receiving_record_id: (a.changed_at, u.email) for a, u in rows}

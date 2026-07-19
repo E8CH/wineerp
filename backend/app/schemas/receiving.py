@@ -54,6 +54,9 @@ class ReceivingHistoryItem(BaseModel):
     staff_email: str
     memo: str | None
     representative_image_key: str | None
+    # 수정 이력이 있으면 누가 마지막으로 고쳤는지. `staff_email`은 최초 입고자이므로,
+    # 이 필드가 없으면 남이 고친 수량이 원 입고자 이름으로 표시된다.
+    amended_by: str | None = None
     # 'initial_setup'이면 초기 세팅분이다. 구분하지 않으면 작업자가
     # "초기 세팅으로 넣은 10병"을 "오늘 입고된 10병"으로 읽는다(Story 3.3).
     source: str

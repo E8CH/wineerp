@@ -32,6 +32,7 @@ HistoryItem _item({
   int? vintage = 2016,
   int quantity = 3,
   String? memo,
+  String? amendedBy,
   String source = 'receiving',
 }) =>
     HistoryItem(
@@ -43,6 +44,7 @@ HistoryItem _item({
       receivedAt: DateTime(2026, 7, 19, 14, 5),
       staffEmail: 'staff@wineerp.co',
       memo: memo,
+      amendedBy: amendedBy,
       source: source,
     );
 
@@ -156,5 +158,24 @@ void main() {
       item.receivedAt.toUtc(),
       DateTime.utc(2026, 7, 18, 23),
     );
+  });
+
+  testWidgets('수정된 기록은 누가 고쳤는지 표시한다', (tester) async {
+    // 이게 없으면 최초 입고자 이름 옆에 남이 고친 수량이 뜬다(오귀속).
+    await tester.pumpWidget(_host(_container(
+      _FakeHistoryRepo(items: [_item(amendedBy: 'bob@wineerp.co')]),
+    )));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('amended_badge')), findsOneWidget);
+    expect(find.textContaining('수정됨 · bob'), findsOneWidget);
+  });
+
+  testWidgets('수정되지 않은 기록에는 배지가 없다', (tester) async {
+    await tester.pumpWidget(_host(_container(
+      _FakeHistoryRepo(items: [_item()]),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('amended_badge')), findsNothing);
   });
 }

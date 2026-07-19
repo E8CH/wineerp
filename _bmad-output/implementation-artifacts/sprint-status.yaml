@@ -44,7 +44,7 @@ story_location: _bmad-output/implementation-artifacts
 development_status:
   # Epic 1 — 기반 구축 & 계정·역할
   epic-1: in-progress
-  1-1-프로젝트-부트스트랩-배포-파이프라인: in-progress
+  1-1-프로젝트-부트스트랩-배포-파이프라인: review
   1-2-사용자-데이터-기반: review
   1-3-직원-가입-로그인: review
   1-4-관리자-가입-로그인-역할-분기: review

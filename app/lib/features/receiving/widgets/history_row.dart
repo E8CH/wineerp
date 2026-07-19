@@ -22,6 +22,7 @@ class HistoryRow extends StatelessWidget {
   }
 
   String get _staff => item.staffEmail.split('@').first;
+  String get _amender => (item.amendedBy ?? '').split('@').first;
 
   @override
   Widget build(BuildContext context) {
@@ -70,6 +71,32 @@ class HistoryRow extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      // 수정 사실을 드러내지 않으면 최초 입고자 이름 옆에 남이 고친
+                      // 수량이 뜬다 — 감사 행은 남지만 화면에서는 오귀속된다.
+                      if (item.isAmended)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.edit_note,
+                                size: 14,
+                                color: AppColors.warning,
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  '수정됨 · $_amender',
+                                  key: const Key('amended_badge'),
+                                  style: theme.textTheme.bodySmall
+                                      ?.copyWith(color: AppColors.warning),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       if (item.isInitialSetup)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),

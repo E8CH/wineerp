@@ -23,6 +23,7 @@ def list_receiving(
     """기간 내 입고 내역. 경계는 KST 달력 기준이다(core.timeframe 참조)."""
     start, end = period_bounds(period, anchor)
     rows = receiving_crud.list_records(session, start=start, end=end)
+    amended = receiving_crud.last_amendments_for(session, [r[0].id for r in rows])
     items = [
         ReceivingHistoryItem(
             id=rec.id,
@@ -35,6 +36,7 @@ def list_receiving(
             staff_email=user.email,
             memo=rec.memo,
             representative_image_key=vintage.representative_image_key,
+            amended_by=amended[rec.id][1] if rec.id in amended else None,
             source=str(rec.source),
         )
         for rec, vintage, product, user in rows

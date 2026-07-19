@@ -25,6 +25,7 @@ class HistoryItem {
     this.vintage,
     this.memo,
     this.representativeImageKey,
+    this.amendedBy,
     this.source = 'receiving',
   });
 
@@ -38,6 +39,10 @@ class HistoryItem {
   final String? memo;
   final String? representativeImageKey;
 
+  /// 마지막으로 수정한 사람. `staffEmail`은 최초 입고자이므로, 이 값이 없으면
+  /// 남이 고친 수량이 원 입고자 이름으로 표시된다(오귀속).
+  final String? amendedBy;
+
   /// 'initial_setup'이면 초기 세팅분이다. 구분하지 않으면 작업자가
   /// "세팅으로 넣은 10병"을 "오늘 입고된 10병"으로 읽는다.
   final String source;
@@ -45,6 +50,7 @@ class HistoryItem {
   bool get isInitialSetup => source == 'initial_setup';
   String get vintageLabel => vintage?.toString() ?? 'NV';
   bool get hasMemo => (memo ?? '').trim().isNotEmpty;
+  bool get isAmended => (amendedBy ?? '').isNotEmpty;
 
   factory HistoryItem.fromJson(Map<String, dynamic> json) => HistoryItem(
         id: json['id'] as String,
@@ -57,6 +63,7 @@ class HistoryItem {
         staffEmail: json['staff_email'] as String,
         memo: json['memo'] as String?,
         representativeImageKey: json['representative_image_key'] as String?,
+        amendedBy: json['amended_by'] as String?,
         source: json['source'] as String? ?? 'receiving',
       );
 }
