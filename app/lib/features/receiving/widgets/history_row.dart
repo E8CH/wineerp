@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme.dart';
+import '../../../core/widgets/label_thumbnail.dart';
 import '../../../data/history_repository.dart';
 import 'category_bar.dart';
 
@@ -41,15 +42,9 @@ class HistoryRow extends StatelessWidget {
                     ? AppColors.categoryIdentity
                     : AppColors.categoryStock,
               ),
-              Container(
-                width: 56,
-                height: 56,
-                margin: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.wine_bar, color: AppColors.muted, size: 24),
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: LabelThumbnail(imageKey: item.representativeImageKey),
               ),
               Expanded(
                 child: Padding(

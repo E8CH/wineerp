@@ -63,6 +63,7 @@ class ReceivingPanel extends ConsumerWidget {
           modelName: candidate.product.modelName,
           producer: candidate.product.producer,
           vintage: candidate.year,
+          imageKey: candidate.vintage?.representativeImageKey,
           stock: candidate.stock,
         ),
         const SizedBox(height: 8),

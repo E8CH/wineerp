@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme.dart';
+import '../../../core/widgets/label_thumbnail.dart';
 import 'category_bar.dart';
 
-/// 입고 확인 카드 (UX-DR5) — 병 사진 자리·모델명(22)·빈티지·현재고 배지·좌측 CategoryBar.
+/// 입고 확인 카드 (UX-DR5) — 병 사진·모델명(22)·빈티지·현재고 배지·좌측 CategoryBar.
 class ReceivingConfirmCard extends StatelessWidget {
   const ReceivingConfirmCard({
     super.key,
     required this.modelName,
     required this.producer,
     this.vintage,
-    this.imageUrl,
+    this.imageKey,
     this.stock,
     this.onConfirm,
   });
@@ -18,7 +19,9 @@ class ReceivingConfirmCard extends StatelessWidget {
   final String modelName;
   final String producer;
   final int? vintage;
-  final String? imageUrl;
+
+  /// 저장된 라벨 사진 key(있으면). null이면 병 아이콘으로 떨어진다.
+  final String? imageKey;
 
   /// 현재고(서버 집계). null이면 배지를 숨긴다 — 0과 "모름"은 다르다.
   final int? stock;
@@ -37,16 +40,9 @@ class ReceivingConfirmCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const CategoryBar(color: AppColors.categoryIdentity),
-            // 병 사진 자리
-            Container(
-              width: 72,
-              height: 72,
-              margin: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.background,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(Icons.wine_bar, color: AppColors.muted),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: LabelThumbnail(imageKey: imageKey, size: 72),
             ),
             Expanded(
               child: Padding(
