@@ -8,6 +8,7 @@ from app.api.routes import (
     health,
     images,
     inference,
+    inventory,
     receiving,
     receiving_history,
     reports,
@@ -25,6 +26,4 @@ api_router.include_router(receiving_history.router)
 api_router.include_router(inference.router)
 api_router.include_router(wines.router)
 api_router.include_router(reports.router)
-
-# 후속 스토리 등록 예정:
-#   초기 세팅 (3.3) · receiving 조회·수정 (4.x) · reports (5.x)
+api_router.include_router(inventory.router)

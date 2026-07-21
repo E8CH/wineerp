@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wineerp_app/core/theme.dart';
 import 'package:wineerp_app/data/image_upload_service.dart';
 import 'package:wineerp_app/data/inference_repository.dart';
+import 'package:wineerp_app/data/inventory_repository.dart';
 import 'package:wineerp_app/data/wine_repository.dart';
 import 'package:wineerp_app/features/registration/registration_controller.dart';
 import 'package:wineerp_app/features/registration/registration_panel.dart';
@@ -222,6 +223,24 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.lastCall!['vintage'], 2016);
+    });
+
+    testWidgets('등록 성공 시 재고 리비전을 올린다(재고 탭 갱신)', (tester) async {
+      // 새 마스터가 재고 목록에 즉시 나타나게 하는 배선. registration_controller의
+      // bumpInventory(ref)를 지우면 이 단언만 깨진다.
+      final c = _container(wineRepo: _FakeWineRepo());
+      expect(c.read(inventoryRevisionProvider), 0);
+      await tester.pumpWidget(_host(c));
+      await tester.tap(find.byKey(const Key('capture_label_button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byKey(const Key('producer_field')), 'Penfolds');
+      await tester.enterText(find.byKey(const Key('model_name_field')), 'Grange');
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('registration_submit')));
+      await tester.pumpAndSettle();
+
+      expect(c.read(inventoryRevisionProvider), 1);
     });
   });
 

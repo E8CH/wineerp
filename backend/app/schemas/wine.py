@@ -34,3 +34,20 @@ class WineCreated(BaseModel):
     vintage_id: uuid.UUID
     # 기준 재고를 함께 만들었으면 그 레코드 id. 아니면 None.
     receiving_record_id: uuid.UUID | None = None
+
+
+class InventoryItem(BaseModel):
+    """재고 목록 1행 = 한 빈티지(재고 단위) (Story 6.2)."""
+
+    wine_product_id: uuid.UUID
+    producer: str
+    model_name: str
+    region: str | None = None
+    country: str | None = None
+    grape: str | None = None
+    vintage_id: uuid.UUID
+    # None = NV. "빈티지 없음"이 아니라 유효 상태 — 화면에서 오류로 표기하지 말 것.
+    vintage: int | None = None
+    representative_image_key: str | None = None
+    # 현재고 = 입고 합계(서버 집계). 화면에서 재계산 금지.
+    stock: int

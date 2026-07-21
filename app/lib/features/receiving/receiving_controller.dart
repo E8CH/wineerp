@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/uuid.dart';
+import '../../data/inventory_repository.dart';
 import '../../data/receiving_repository.dart';
 import '../scan/scan_controller.dart';
 
@@ -81,6 +82,9 @@ class ReceivingController extends Notifier<ReceivingState> {
       // 임계 경로 밖에서 처리한다 — 진동이 안 되는 기기에서 리셋이 통째로
       // 건너뛰어지면 입고는 됐는데 다음 병을 못 찍는 상태가 된다.
       unawaited(HapticFeedback.mediumImpact().catchError((_) {}));
+      // 재고가 늘었으므로 재고 탭을 다음 조회 때 새로고침한다. 없으면 방금 입고한
+      // 병이 재고 목록에 안 보여 "왜 그대로지"가 된다(조용히 stale).
+      bumpInventory(ref);
       _resetScanLoop();
       state = ReceivingState(idempotencyKey: uuidV4()); // 다음 병은 새 키
       return true;

@@ -3,6 +3,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../data/image_upload_service.dart';
 import '../../data/inference_repository.dart';
+import '../../data/inventory_repository.dart';
 import '../../data/wine_repository.dart';
 
 /// 라벨 촬영·업로드 경로. 테스트에서 override해 시스템 카메라를 우회한다.
@@ -214,6 +215,9 @@ class RegistrationController extends Notifier<RegistrationState> {
             // 마스터가 남고 작업자는 알 수 없다.
             initialQuantity: state.initialQuantity,
           );
+      // 새 마스터(및 초기 세팅 수량)가 생겼으니 재고 탭을 다음 조회 때 새로고침한다 —
+      // 없으면 방금 등록한 와인이 재고 목록에 안 나타난다.
+      bumpInventory(ref);
       // ⚠️ 성공 경로에서도 반드시 내린다. 호출자가 reset()을 부를 것이라고 가정하면,
       // 부르지 않는 호출자에게는 영원히 도는 스피너와 잠긴 폼이 남는다.
       if (gen != _generation) return created.vintageId; // 폼은 이미 다음 병 것

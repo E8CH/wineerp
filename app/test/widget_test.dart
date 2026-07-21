@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:wineerp_app/data/inventory_repository.dart';
 import 'package:wineerp_app/features/auth/auth_controller.dart';
 import 'package:wineerp_app/features/scan/scan_controller.dart';
 import 'package:wineerp_app/main.dart';
@@ -16,6 +17,8 @@ Widget _app() => ProviderScope(
       overrides: [
         authControllerProvider.overrideWith(_AuthedController.new),
         cameraEnabledProvider.overrideWithValue(false),
+        // 재고 탭이 실제 네트워크를 치지 않도록 빈 목록으로 대체.
+        inventoryProvider.overrideWith((ref) async => const <InventoryItem>[]),
       ],
       child: const WineerpApp(),
     );
@@ -38,6 +41,8 @@ void main() {
     await tester.tap(find.text('재고'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('재고가 여기에'), findsOneWidget);
+    // 재고 화면으로 전환됐는지 — 빈 상태 안내와 새로고침 버튼은 이 화면에만 있다.
+    expect(find.byKey(const Key('inventory_empty')), findsOneWidget);
+    expect(find.byKey(const Key('inventory_refresh')), findsOneWidget);
   });
 }

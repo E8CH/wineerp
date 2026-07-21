@@ -108,3 +108,38 @@ def get_vintages_for_product(
     session: Session, wine_product_id: uuid.UUID
 ) -> list[WineVintage]:
     return list(session.exec(vintages_for_product_stmt(wine_product_id)).all())
+
+
+def inventory_rows_stmt():
+    """재고 목록 조회 구문 (Story 6.2). 정렬 계약이 여기 한 곳에 산다.
+
+    ⚠️ scan 경로(`vintages_for_product_stmt`)와 같은 이유로 구문을 함수로 **추출**한다.
+    실행 테스트는 SQLite에서만 도는데 SQLite는 DESC에서 NULL이 원래 마지막이라
+    `nullslast`가 no-op이다 — 인라인하면 `nullslast`를 지워도 초록불이라 운영(Postgres)
+    에서만 NV가 목록 맨 위로 올라오는 회귀를 구조적으로 못 잡는다. 이 함수를 직접
+    컴파일하는 Postgres 단언(test)이 그 공백을 메운다.
+
+    정렬: 생산자→모델명 알파벳순으로 묶고, 같은 와인 안에서는 최신 빈티지 우선
+    (`nullslast`로 NV는 맨 끝). `id` 타이브레이커가 없으면 같은 연도 2행의 순서가
+    방언마다 달라져 스크롤 위치가 흔들린다.
+    """
+    return (
+        select(WineProduct, WineVintage)
+        .join(WineVintage, WineVintage.wine_product_id == WineProduct.id)
+        .order_by(
+            WineProduct.producer,
+            WineProduct.model_name,
+            nullslast(desc(WineVintage.vintage)),
+            WineVintage.id,
+        )
+    )
+
+
+def list_inventory_rows(session: Session) -> list[tuple[WineProduct, WineVintage]]:
+    """재고 목록용 (제품, 빈티지) 전체 (Story 6.2).
+
+    빈티지 = 가격결정·재고 단위(AR2)이므로 행은 빈티지 단위다. 제품·빈티지를
+    **한 번의 조인**으로 가져온다 — 행마다 제품을 다시 조회하면 카탈로그가 커질수록
+    N+1로 느려진다(NFR1). 현재고는 호출부가 `get_stock_map`으로 한 번에 합산한다.
+    """
+    return list(session.exec(inventory_rows_stmt()).all())

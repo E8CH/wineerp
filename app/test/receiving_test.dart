@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wineerp_app/core/theme.dart';
+import 'package:wineerp_app/data/inventory_repository.dart';
 import 'package:wineerp_app/data/receiving_repository.dart';
 import 'package:wineerp_app/data/scan_models.dart';
 import 'package:wineerp_app/features/receiving/receiving_controller.dart';
@@ -223,6 +224,25 @@ void main() {
 
       expect(repo.keysSeen.length, 2);
       expect(repo.keysSeen[0], isNot(repo.keysSeen[1]));
+    });
+
+    testWidgets('입고 성공 시 재고 리비전을 올린다(재고 탭 갱신)', (tester) async {
+      // 이 배선이 stale 재고를 막는 전부다. bumpInventory(ref)를 지우면 이 단언만
+      // 깨지고 나머지는 전부 초록으로 남는다(입고 후 재고 탭이 조용히 옛 수량을 보임).
+      final c = _container(_FakeReceivingRepo());
+      expect(c.read(inventoryRevisionProvider), 0);
+
+      final ok = await c.read(receivingControllerProvider.notifier).submit('v1');
+
+      expect(ok, isTrue);
+      expect(c.read(inventoryRevisionProvider), 1);
+    });
+
+    testWidgets('입고 실패 시에는 재고 리비전을 올리지 않는다', (tester) async {
+      // 성공 경로에만 붙어야 한다 — 실패에도 올리면 재고 탭이 헛되이 다시 조회한다.
+      final c = _container(_FakeReceivingRepo(fail: true, statusCode: 400));
+      await c.read(receivingControllerProvider.notifier).submit('v1');
+      expect(c.read(inventoryRevisionProvider), 0);
     });
 
     testWidgets('401은 재시도가 아니라 재로그인을 안내한다', (tester) async {
