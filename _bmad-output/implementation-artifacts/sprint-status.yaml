@@ -88,7 +88,10 @@ development_status:
   epic-5-retrospective: optional
 
   # Epic 6 — 라벨 사진 & 재고 열람 (구현 단계에서 발견된 계획 공백 정식화)
-  epic-6: in-progress
-  6-1-라벨-사진-저장-조회: review    # 백엔드 73dd0c6 + Flutter 표시·캐시(신규)
-  6-2-재고-목록: review              # GET /inventory + 재고 탭 화면(신규)
+  # 독립 적대 코드리뷰 3종(백엔드 무결성/Flutter 상태·캐시/보안·연극테스트) 완료 →
+  # 실기능 결함 0, 지적된 검증 공백 전부 보강 + 변이 검증(nullslast·bumpInventory·
+  # errorBuilder) → done 승격.
+  epic-6: done
+  6-1-라벨-사진-저장-조회: done    # 백엔드 73dd0c6 + Flutter 표시·캐시(1aa9e5f)
+  6-2-재고-목록: done             # GET /inventory + 재고 탭 화면(3c8dcd9)
   epic-6-retrospective: optional
