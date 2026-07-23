@@ -38,6 +38,7 @@ def list_receiving(
             representative_image_key=vintage.representative_image_key,
             amended_by=amended[rec.id][1] if rec.id in amended else None,
             source=str(rec.source),
+            model_archived=product.archived_at is not None,
         )
         for rec, vintage, product, user in rows
     ]

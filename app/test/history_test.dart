@@ -34,6 +34,7 @@ HistoryItem _item({
   String? memo,
   String? amendedBy,
   String source = 'receiving',
+  bool modelArchived = false,
 }) =>
     HistoryItem(
       id: id,
@@ -46,6 +47,7 @@ HistoryItem _item({
       memo: memo,
       amendedBy: amendedBy,
       source: source,
+      modelArchived: modelArchived,
     );
 
 ProviderContainer _container(_FakeHistoryRepo repo) {
@@ -177,5 +179,23 @@ void main() {
     )));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('amended_badge')), findsNothing);
+  });
+
+  testWidgets('삭제된 모델의 과거 입고는 "삭제된 모델" 마커를 단다', (tester) async {
+    // 원장으로 내역엔 남지만 재고엔 없는 이유를 밝힌다. 마커가 없으면 "재고엔 없는데
+    // 왜 내역엔 있지"가 된다.
+    await tester.pumpWidget(_host(_container(
+      _FakeHistoryRepo(items: [_item(modelArchived: true)]),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('archived_badge')), findsOneWidget);
+  });
+
+  testWidgets('삭제되지 않은 모델에는 삭제 마커가 없다', (tester) async {
+    await tester.pumpWidget(_host(_container(
+      _FakeHistoryRepo(items: [_item()]),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('archived_badge')), findsNothing);
   });
 }

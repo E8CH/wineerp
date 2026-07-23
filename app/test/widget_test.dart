@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:wineerp_app/data/inventory_repository.dart';
+import 'package:wineerp_app/data/wine_catalog_repository.dart';
 import 'package:wineerp_app/features/auth/auth_controller.dart';
 import 'package:wineerp_app/features/scan/scan_controller.dart';
 import 'package:wineerp_app/main.dart';
@@ -17,20 +18,23 @@ Widget _app() => ProviderScope(
       overrides: [
         authControllerProvider.overrideWith(_AuthedController.new),
         cameraEnabledProvider.overrideWithValue(false),
-        // 재고 탭이 실제 네트워크를 치지 않도록 빈 목록으로 대체.
+        // 재고·모델 탭이 실제 네트워크를 치지 않도록 빈 목록으로 대체. indexedStack은
+        // 모든 브랜치를 즉시 빌드하므로 두 탭의 프로바이더가 앱 시작 시 발화한다.
         inventoryProvider.overrideWith((ref) async => const <InventoryItem>[]),
+        catalogProvider.overrideWith((ref) async => const <ProductCatalogItem>[]),
       ],
       child: const WineerpApp(),
     );
 
 void main() {
-  testWidgets('인증 시 앱 셸이 4탭으로 뜨고 홈은 스캔', (tester) async {
+  testWidgets('인증 시 앱 셸이 5탭으로 뜨고 홈은 스캔', (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
     expect(find.text('내역'), findsOneWidget);
     expect(find.text('리포트'), findsOneWidget);
     expect(find.text('재고'), findsOneWidget);
+    expect(find.text('모델'), findsOneWidget);
     expect(find.text('스캔'), findsWidgets);
   });
 

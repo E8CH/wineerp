@@ -27,6 +27,7 @@ class HistoryItem {
     this.representativeImageKey,
     this.amendedBy,
     this.source = 'receiving',
+    this.modelArchived = false,
   });
 
   final String id;
@@ -47,6 +48,10 @@ class HistoryItem {
   /// "세팅으로 넣은 10병"을 "오늘 입고된 10병"으로 읽는다.
   final String source;
 
+  /// 이 기록의 모델이 삭제(아카이브)됐는지. 삭제된 모델의 과거 입고는 원장으로 내역에
+  /// 남지만 재고·카탈로그엔 없다 — 마커가 없으면 "재고엔 없는데 왜 내역엔 있지"가 된다.
+  final bool modelArchived;
+
   bool get isInitialSetup => source == 'initial_setup';
   String get vintageLabel => vintage?.toString() ?? 'NV';
   bool get hasMemo => (memo ?? '').trim().isNotEmpty;
@@ -65,6 +70,7 @@ class HistoryItem {
         representativeImageKey: json['representative_image_key'] as String?,
         amendedBy: json['amended_by'] as String?,
         source: json['source'] as String? ?? 'receiving',
+        modelArchived: json['model_archived'] as bool? ?? false,
       );
 }
 

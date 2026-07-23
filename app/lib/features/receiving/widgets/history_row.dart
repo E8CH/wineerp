@@ -102,6 +102,24 @@ class HistoryRow extends StatelessWidget {
                                 ?.copyWith(color: AppColors.navy),
                           ),
                         ),
+                      // 삭제된 모델의 과거 입고는 원장으로 남는다 — 재고엔 없는 이유를 밝힌다.
+                      if (item.modelArchived)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 4),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.block, size: 14,
+                                  color: AppColors.muted),
+                              const SizedBox(width: 4),
+                              Text(
+                                '삭제된 모델',
+                                key: const Key('archived_badge'),
+                                style: theme.textTheme.bodySmall
+                                    ?.copyWith(color: AppColors.muted),
+                              ),
+                            ],
+                          ),
+                        ),
                       if (item.hasMemo)
                         Padding(
                           padding: const EdgeInsets.only(top: 4),

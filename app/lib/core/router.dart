@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../features/auth/auth_controller.dart';
 import '../features/auth/login_screen.dart';
+import '../features/catalog/catalog_screen.dart';
 import '../features/inventory/inventory_screen.dart';
 import '../features/receiving/history_screen.dart';
 import '../features/report/report_screen.dart';
@@ -45,6 +46,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           StatefulShellBranch(
             routes: [GoRoute(path: '/inventory', builder: (c, s) => const InventoryScreen())],
+          ),
+          StatefulShellBranch(
+            routes: [GoRoute(path: '/catalog', builder: (c, s) => const CatalogScreen())],
           ),
         ],
       ),
@@ -91,6 +95,11 @@ class _ScaffoldWithNav extends StatelessWidget {
             icon: Icon(Icons.wine_bar_outlined),
             selectedIcon: Icon(Icons.wine_bar),
             label: '재고',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.style_outlined),
+            selectedIcon: Icon(Icons.style),
+            label: '모델',
           ),
         ],
       ),

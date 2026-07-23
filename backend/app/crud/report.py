@@ -35,6 +35,10 @@ def receiving_report(
         .join(WineVintage, ReceivingRecord.wine_vintage_id == WineVintage.id)
         .join(WineProduct, WineVintage.wine_product_id == WineProduct.id)
         .where(ReceivingRecord.deleted_at.is_(None))  # soft-delete 제외(AR6)
+        # 아카이브(삭제)된 제품은 리포트에서도 제외한다. 재고에서 사라진 모델이 리포트엔
+        # 남으면 "재고 40 · 리포트 100"이 되어 관리자가 무엇을 믿을지 모른다(재고=리포트 원칙).
+        # 과거 기록 자체는 내역(원장)에 그대로 남는다.
+        .where(WineProduct.archived_at.is_(None))
         .where(ReceivingRecord.received_at >= start)
         .where(ReceivingRecord.received_at < end)
     ).all()

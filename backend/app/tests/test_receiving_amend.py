@@ -230,6 +230,11 @@ def test_no_hard_delete_path_exists_anywhere():
     ⚠️ 이전 버전은 `dir(receiving_crud)`에서 "hard"라는 **이름**만 찾는 린트였다.
     `purge_record()`라는 이름으로 `session.delete()`를 추가하면 그대로 통과했다
     (코드리뷰에서 실증됨). 이름이 아니라 **호출**을 찾는다.
+
+    예외: 원장이 아닌 행(예: 바코드↔제품 링크)의 삭제는 정당하다. 그런 줄에는 반드시
+    `hard-delete-ok` 마커를 달아 **의도를 명시**한다 — 마커는 리뷰어가 보라고 남기는
+    것이고, 이 테스트는 마커 없는 삭제만 잡는다. 원장(입고기록) 자체의 보존은 실행 테스트
+    `test_archive_preserves_receiving_ledger`가 별도로 못 박는다(소스 스캔보다 강하다).
     """
     import pathlib
 
@@ -241,12 +246,15 @@ def test_no_hard_delete_path_exists_anywhere():
         for lineno, line in enumerate(
             path.read_text(encoding="utf-8").splitlines(), start=1
         ):
+            if "hard-delete-ok" in line:
+                continue  # 명시적으로 허용된 비-원장 삭제(바코드 링크 등)
             if "session.delete(" in line or ".delete(synchronize_session" in line:
                 offenders.append(f"{path.relative_to(app_dir)}:{lineno}: {line.strip()}")
 
     assert not offenders, (
         "하드삭제 호출이 있습니다. 입고 기록은 5년 보존 대상이며 soft-delete만 "
-        "허용됩니다(AR6): " + " | ".join(offenders)
+        "허용됩니다(AR6). 원장이 아닌 정당한 삭제면 'hard-delete-ok' 마커를 다세요: "
+        + " | ".join(offenders)
     )
 
 

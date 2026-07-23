@@ -51,3 +51,45 @@ class InventoryItem(BaseModel):
     representative_image_key: str | None = None
     # 현재고 = 입고 합계(서버 집계). 화면에서 재계산 금지.
     stock: int
+
+
+class VintageStock(BaseModel):
+    """카탈로그 상세에서 한 제품 아래의 빈티지 1건 (Story 7.x)."""
+
+    vintage_id: uuid.UUID
+    vintage: int | None = None  # None = NV
+    stock: int
+    representative_image_key: str | None = None
+
+
+class ProductCatalogItem(BaseModel):
+    """모델(제품) 카탈로그 1장 = 한 WineProduct + 그 빈티지들 (Story 7.x).
+
+    카탈로그는 제품 단위 카드다(재고 탭은 빈티지 단위 행). 대표 사진은 빈티지 중 사진이
+    있는 첫 항목에서 취한다. total_stock은 빈티지 재고의 합.
+    """
+
+    product_id: uuid.UUID
+    producer: str
+    model_name: str
+    region: str | None = None
+    country: str | None = None
+    grape: str | None = None
+    representative_image_key: str | None = None
+    total_stock: int
+    vintages: list[VintageStock]
+
+
+class WineUpdate(BaseModel):
+    """모델(제품) 메타 수정 (Story 7.x). 입고내역·재고는 제품을 조인으로 읽어 자동 전파된다.
+
+    빈티지·바코드·수량은 여기서 다루지 않는다 — 그건 입고/등록 경로의 책임이다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    producer: str = Field(min_length=1, max_length=200)
+    model_name: str = Field(min_length=1, max_length=200)
+    region: str | None = Field(default=None, max_length=200)
+    country: str | None = Field(default=None, max_length=100)
+    grape: str | None = Field(default=None, max_length=200)

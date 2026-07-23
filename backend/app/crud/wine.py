@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import desc, nullslast
 from sqlmodel import Session, select
@@ -78,7 +79,13 @@ def find_products_by_barcode(session: Session, code: str) -> list[WineProduct]:
     if not product_ids:
         return []
     return list(
-        session.exec(select(WineProduct).where(WineProduct.id.in_(product_ids))).all()
+        session.exec(
+            select(WineProduct)
+            .where(WineProduct.id.in_(product_ids))
+            # 아카이브(삭제)된 제품은 스캔 매칭에서 제외한다. 삭제 시 바코드 링크를
+            # 지우므로 보통은 링크 자체가 없어 여기 오지 않지만, 이 필터가 최후의 방어선이다.
+            .where(WineProduct.archived_at.is_(None))
+        ).all()
     )
 
 
@@ -126,6 +133,9 @@ def inventory_rows_stmt():
     return (
         select(WineProduct, WineVintage)
         .join(WineVintage, WineVintage.wine_product_id == WineProduct.id)
+        # 아카이브(삭제)된 제품은 재고·카탈로그에서 제외한다. SQLite도 IS NULL을 그대로
+        # 실행하므로 이 필터는 실행 테스트로 변이 검증된다(아카이브 후 목록에서 사라지는지).
+        .where(WineProduct.archived_at.is_(None))
         .order_by(
             WineProduct.producer,
             WineProduct.model_name,
@@ -141,5 +151,67 @@ def list_inventory_rows(session: Session) -> list[tuple[WineProduct, WineVintage
     빈티지 = 가격결정·재고 단위(AR2)이므로 행은 빈티지 단위다. 제품·빈티지를
     **한 번의 조인**으로 가져온다 — 행마다 제품을 다시 조회하면 카탈로그가 커질수록
     N+1로 느려진다(NFR1). 현재고는 호출부가 `get_stock_map`으로 한 번에 합산한다.
+
+    카탈로그(모델 목록) 라우트도 이 함수를 재사용해 **같은 아카이브 필터**를 공유한다 —
+    재고는 빈티지 단위 행으로, 카탈로그는 제품 단위로 묶어 보여줄 뿐 원천이 같다.
     """
     return list(session.exec(inventory_rows_stmt()).all())
+
+
+def get_active_product(
+    session: Session, product_id: uuid.UUID
+) -> WineProduct | None:
+    """활성(미아카이브) 제품만. 아카이브(삭제)된 제품은 상세·수정 대상이 아니다."""
+    product = session.get(WineProduct, product_id)
+    if product is None or product.archived_at is not None:
+        return None
+    return product
+
+
+def update_product(
+    session: Session,
+    product: WineProduct,
+    *,
+    producer: str,
+    model_name: str,
+    region: str | None,
+    country: str | None,
+    grape: str | None,
+) -> WineProduct:
+    """제품(모델) 메타 수정. 입고내역·재고는 이 제품을 조인으로 읽으므로 **자동 전파**된다
+    (모델명을 복사해 두는 곳이 없다). 그래서 여기서 값만 바꾸면 모든 화면에 반영된다."""
+    product.producer = producer
+    product.model_name = model_name
+    product.region = region
+    product.country = country
+    product.grape = grape
+    session.add(product)
+    session.commit()
+    session.refresh(product)
+    return product
+
+
+def archive_product(session: Session, product: WineProduct) -> WineProduct:
+    """모델 "삭제" = 아카이브 + 바코드 링크 제거.
+
+    ⚠️ 입고기록(원장)은 하드삭제하지 않는다(국세기본법 5년 보존, AR6). archived_at만
+    채워 카탈로그·재고·리포트·스캔에서 빠지게 하고, 내역엔 과거 기록이 남는다.
+    바코드 링크는 **하드 제거**한다 — 남겨 두면 그 바코드를 다시 스캔했을 때 아카이브된
+    옛 제품이 계속 매칭돼, 재등록 시 바코드 하나가 옛/새 제품 둘에 걸리는 충돌이 난다.
+    링크를 지우면 바코드가 풀려 같은 모델을 충돌 없이 새로 등록할 수 있다.
+    """
+    product.archived_at = datetime.now(UTC)
+    session.add(product)
+    links = session.exec(
+        select(BarcodeWineProductLink).where(
+            BarcodeWineProductLink.wine_product_id == product.id
+        )
+    ).all()
+    for link in links:
+        # 바코드↔제품 링크는 원장이 아니다(5년 보존 대상 아님). 지워야 바코드가 풀려 같은
+        # 모델을 충돌 없이 재등록할 수 있다. 입고기록은 건드리지 않는다 —
+        # test_archive_preserves_receiving_ledger가 실행으로 못 박는다.
+        session.delete(link)  # hard-delete-ok: 바코드 링크(원장 아님)
+    session.commit()
+    session.refresh(product)
+    return product

@@ -37,6 +37,14 @@ class WineProduct(SQLModel, table=True):
     country: str | None = None
     grape: str | None = None
     lwin7: str | None = Field(default=None, index=True)  # 내부 표준키(와인)
+    # 모델 "삭제"는 아카이브다(Story 7.x). 카탈로그·재고·리포트·스캔에서 제외되지만,
+    # 이 제품에 딸린 입고기록(원장, 국세기본법 5년 보존)은 하드삭제하지 않고 그대로 둔다.
+    # 내역 화면은 아카이브된 제품의 과거 기록을 계속 보여준다(마커 표시). 삭제 시 바코드
+    # 링크만 하드 제거해 같은 모델을 충돌 없이 재등록할 수 있게 한다.
+    archived_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(DateTime(timezone=True), nullable=True, index=True),
+    )
     created_at: datetime = Field(default_factory=_utcnow, sa_column=_tz_column())
 
 
