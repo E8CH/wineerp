@@ -12,9 +12,11 @@ class _FakeAuthRepo extends AuthRepository {
   _FakeAuthRepo({this.fail = false}) : super(Dio());
 
   final bool fail;
+  final List<({String username, String password})> calls = [];
 
   @override
   Future<String> login(String email, String password) async {
+    calls.add((username: email, password: password));
     if (fail) throw Exception('invalid');
     return 'fake-token';
   }
@@ -22,6 +24,9 @@ class _FakeAuthRepo extends AuthRepository {
   @override
   Future<Map<String, dynamic>> me() async => {'role': 'staff'};
 }
+
+String _fieldText(WidgetTester tester, String key) =>
+    tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
 
 void main() {
   test('로그인 성공 → 토큰·역할 설정', () async {
@@ -59,24 +64,39 @@ void main() {
     expect(state.error, isNotNull);
   });
 
-  testWidgets('로그인 화면: 제출 시 인증됨', (tester) async {
+  testWidgets('로그인 화면은 데모 계정(admin/pw1234)으로 기본 입력된다', (tester) async {
+    // 앱을 껐다 켜도 항상 이 값으로 채워져, [로그인]만 누르면 바로 들어간다.
     final container = ProviderContainer(
       overrides: [authRepositoryProvider.overrideWithValue(_FakeAuthRepo())],
     );
     addTearDown(container.dispose);
 
-    await tester.pumpWidget(
-      UncontrolledProviderScope(
-        container: container,
-        child: const MaterialApp(home: LoginScreen()),
-      ),
-    );
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: LoginScreen()),
+    ));
 
-    await tester.enterText(find.byKey(const Key('email_field')), 'a@wineerp.co');
-    await tester.enterText(find.byKey(const Key('password_field')), 'pw123456');
+    expect(_fieldText(tester, 'email_field'), 'admin');
+    expect(_fieldText(tester, 'password_field'), 'pw1234');
+  });
+
+  testWidgets('기본 입력값 그대로 로그인 버튼을 누르면 그 값으로 로그인한다', (tester) async {
+    // 채워만 두고 다른 값을 보내면 소용없다 — 기본값이 실제 제출되는지 고정한다.
+    final repo = _FakeAuthRepo();
+    final container = ProviderContainer(
+      overrides: [authRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    await tester.pumpWidget(UncontrolledProviderScope(
+      container: container,
+      child: const MaterialApp(home: LoginScreen()),
+    ));
     await tester.tap(find.byKey(const Key('login_button')));
     await tester.pumpAndSettle();
 
+    expect(repo.calls.single.username, 'admin');
+    expect(repo.calls.single.password, 'pw1234');
     expect(container.read(authControllerProvider).isAuthenticated, isTrue);
   });
 

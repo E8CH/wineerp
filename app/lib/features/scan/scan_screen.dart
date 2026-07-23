@@ -88,7 +88,12 @@ class ScanScreen extends ConsumerWidget {
             child: Stack(
               children: [
                 if (cameraEnabled)
-                  ScannerOverlay(onNewCode: (code) => _match(ref, code))
+                  ScannerOverlay(
+                    onNewCode: (code) => _match(ref, code),
+                    // 홀드 화면에서 "다시 스캔" → 스캔 상태 전체를 비운다.
+                    // scanController.reset()이 오버레이 리스너를 깨워 카메라를 재개한다.
+                    onRescan: () => _clearScanState(ref),
+                  )
                 else
                   const _CameraPlaceholder(),
                 // ⚠️ 높이를 제한하고 스크롤을 준다. `Positioned(left/right/bottom)`만 주면
