@@ -56,6 +56,7 @@ ProductCatalogItem _item({
   String? country = '호주',
   String? grape = 'Shiraz',
   int totalStock = 12,
+  DateTime? createdAt,
 }) =>
     ProductCatalogItem(
       productId: id,
@@ -65,6 +66,7 @@ ProductCatalogItem _item({
       country: country,
       grape: grape,
       totalStock: totalStock,
+      createdAt: createdAt ?? DateTime(2026, 7, 23),
       vintages: [
         VintageStock(vintageId: '${id}v1', vintage: 2016, stock: totalStock),
       ],
@@ -93,6 +95,88 @@ void main() {
     expect(find.text('Penfolds'), findsOneWidget);
     expect(find.textContaining('Barossa'), findsOneWidget);
     expect(find.textContaining('재고 12병'), findsOneWidget);
+  });
+
+  testWidgets('카드에 등록 날짜가 표시된다', (tester) async {
+    await tester.pumpWidget(_host(_container(
+      _FakeCatalogRepo(items: [_item(createdAt: DateTime(2026, 7, 23))]),
+    )));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('등록 2026.7.23'), findsOneWidget);
+  });
+
+  testWidgets('검색어로 모델명·생산자를 거른다', (tester) async {
+    await tester.pumpWidget(_host(_container(_FakeCatalogRepo(items: [
+      _item(id: 'a', model: 'Grange', producer: 'Penfolds'),
+      _item(id: 'b', model: 'Opus One', producer: 'Mondavi'),
+    ]))));
+    await tester.pumpAndSettle();
+    expect(find.text('Grange'), findsOneWidget);
+    expect(find.text('Opus One'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('catalog_search')), 'opus');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Opus One'), findsOneWidget);
+    expect(find.text('Grange'), findsNothing);
+  });
+
+  testWidgets('검색 결과가 없으면 빈 카탈로그와 구분되는 안내가 뜬다', (tester) async {
+    await tester.pumpWidget(_host(_container(
+      _FakeCatalogRepo(items: [_item(model: 'Grange')]),
+    )));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('catalog_search')), 'zzz없음');
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('catalog_no_results')), findsOneWidget);
+    expect(find.byKey(const Key('catalog_empty')), findsNothing);
+  });
+
+  testWidgets('등록일 필터 진입점이 있다', (tester) async {
+    await tester.pumpWidget(_host(_container(_FakeCatalogRepo(items: [_item()]))));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('catalog_date_filter')), findsOneWidget);
+  });
+
+  group('filterCatalog (순수 로직)', () {
+    final old = _item(id: 'old', model: 'Old One', createdAt: DateTime(2020, 1, 1));
+    final recent =
+        _item(id: 'new', model: 'New One', createdAt: DateTime(2026, 7, 23));
+
+    test('빈 검색·필터는 전부 통과', () {
+      final r = filterCatalog([old, recent], query: '');
+      expect(r.length, 2);
+    });
+
+    test('텍스트는 모델명/생산자/지역을 소문자 부분일치', () {
+      expect(filterCatalog([old, recent], query: 'new').single.modelName,
+          'New One');
+      expect(filterCatalog([old, recent], query: 'penfolds').length, 2);
+      expect(filterCatalog([old, recent], query: 'barossa').length, 2);
+    });
+
+    test('등록일 범위는 양끝 포함으로 거른다', () {
+      final range = DateTimeRange(
+        start: DateTime(2026, 7, 1),
+        end: DateTime(2026, 7, 23), // 종료일 당일 등록분도 포함돼야 한다
+      );
+      final r = filterCatalog([old, recent], query: '', dateRange: range);
+      expect(r.single.modelName, 'New One'); // 2020년 건은 제외
+    });
+
+    test('종료일 당일 등록분이 빠지지 않는다(날짜 비교)', () {
+      // 시각으로 잘랐다면 2026-07-23 00:00 이후 등록분이 종료일 자정에 걸려 빠진다.
+      final sameDay = DateTimeRange(
+        start: DateTime(2026, 7, 23),
+        end: DateTime(2026, 7, 23),
+      );
+      expect(
+        filterCatalog([recent], query: '', dateRange: sameDay).length,
+        1,
+      );
+    });
   });
 
   testWidgets('비어 있으면 빈 상태 안내가 뜬다', (tester) async {

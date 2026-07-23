@@ -48,6 +48,7 @@ def _catalog_item(
         grape=product.grape,
         representative_image_key=rep_image,
         total_stock=sum(stock.get(v.id, 0) for v in vintages),
+        created_at=product.created_at,
         vintages=[
             VintageStock(
                 vintage_id=v.id,

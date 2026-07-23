@@ -131,6 +131,15 @@ def test_detail_returns_vintages_and_stock(client):
     assert body["vintages"][0]["vintage"] == 2018
 
 
+def test_catalog_item_carries_registration_date(client):
+    """카드 표시 + 등록일 검색을 위해 created_at을 실어 보낸다."""
+    token = _token(client)
+    _create(client, token, vintage=2019)
+    items = client.get(f"{API}/wines", headers=_h(token)).json()
+    assert items
+    assert items[0]["created_at"]  # ISO 8601 문자열
+
+
 def test_detail_unknown_returns_404(client):
     token = _token(client)
     assert client.get(f"{API}/wines/{_uuid.uuid4()}", headers=_h(token)).status_code == 404

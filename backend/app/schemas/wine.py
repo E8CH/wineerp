@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -78,6 +79,9 @@ class ProductCatalogItem(BaseModel):
     representative_image_key: str | None = None
     total_stock: int
     vintages: list[VintageStock]
+    # 모델 등록 시각(WineProduct.created_at, UTC). 카드 표시 + 등록일 검색용. 표시·필터의
+    # KST 변환은 클라이언트 몫(입고 시각과 같은 규칙).
+    created_at: datetime
 
 
 class WineUpdate(BaseModel):

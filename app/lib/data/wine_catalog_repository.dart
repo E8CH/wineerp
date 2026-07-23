@@ -35,6 +35,7 @@ class ProductCatalogItem {
     required this.modelName,
     required this.totalStock,
     required this.vintages,
+    required this.createdAt,
     this.region,
     this.country,
     this.grape,
@@ -51,6 +52,18 @@ class ProductCatalogItem {
   final int totalStock;
   final List<VintageStock> vintages;
 
+  /// 모델 등록 시각(로컬 KST). 카드 표시 + 등록일 검색에 쓴다.
+  final DateTime createdAt;
+
+  /// 텍스트 검색 대상 — 모델명·생산자·지역·국가·품종을 한 줄로 이어 소문자 매칭한다.
+  String get searchHaystack => [
+        modelName,
+        producer,
+        region,
+        country,
+        grape,
+      ].where((s) => (s ?? '').isNotEmpty).join(' ').toLowerCase();
+
   factory ProductCatalogItem.fromJson(Map<String, dynamic> json) =>
       ProductCatalogItem(
         productId: json['product_id'] as String,
@@ -61,6 +74,8 @@ class ProductCatalogItem {
         grape: json['grape'] as String?,
         representativeImageKey: json['representative_image_key'] as String?,
         totalStock: (json['total_stock'] as int?) ?? 0,
+        // 서버는 UTC ISO 8601. 표시·필터는 로컬(KST)로 변환한다(입고 시각과 같은 규칙).
+        createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
         vintages: ((json['vintages'] as List<dynamic>?) ?? [])
             .map((e) => VintageStock.fromJson(e as Map<String, dynamic>))
             .toList(),
