@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 from app.core.db import get_session
+from app.core.imaging import strip_exif_to_jpeg
 from app.main import app
 
 API = "/api/v1"
@@ -23,6 +24,30 @@ def _jpeg_with_exif() -> bytes:
     buf = io.BytesIO()
     img.save(buf, "JPEG", exif=exif.tobytes())
     return buf.getvalue()
+
+
+def _jpeg_rotated(orientation: int, size: tuple[int, int]) -> bytes:
+    """지정한 EXIF Orientation을 단 JPEG. 픽셀은 size 그대로, 표시 방향만 태그로 준다."""
+    img = Image.new("RGB", size, "blue")
+    exif = img.getexif()
+    exif[0x0112] = orientation  # 0x0112 = Orientation
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", exif=exif.tobytes())
+    return buf.getvalue()
+
+
+def test_strip_exif_bakes_orientation_into_pixels():
+    """세로로 찍은(=Orientation 6) 라벨이 눕지 않아야 한다.
+
+    Orientation 6은 "저장은 가로, 표시는 90° 회전(세로)"이다. 픽셀을 100x60 가로로
+    저장하되 태그로 세로를 지시한다. 올바르면 처리 결과는 60x100 세로가 되고 Orientation
+    태그도 사라진다. `exif_transpose`를 지우면 100x60 그대로 남아 이 단언이 깨진다
+    (눕는 사진 재현). Flutter Image.memory는 EXIF를 안 읽으므로 서버가 구워야 한다.
+    """
+    out = strip_exif_to_jpeg(_jpeg_rotated(6, (100, 60)))
+    with Image.open(io.BytesIO(out)) as result:
+        assert result.size == (60, 100), "Orientation이 픽셀에 반영되지 않았다(사진이 눕는다)"
+        assert 0x0112 not in result.getexif(), "Orientation 태그가 남아 이중 회전 위험"
 
 
 @pytest.fixture

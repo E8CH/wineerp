@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme.dart';
+import '../../../core/widgets/label_photo.dart';
 import '../../../data/history_repository.dart';
 import '../../auth/auth_controller.dart';
 import 'quantity_stepper.dart';
@@ -69,6 +70,16 @@ class _AmendSheetState extends ConsumerState<AmendSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 상단에 찍은 라벨 사진을 크게. 사진이 없는 기록(초기 세팅 등)은 자리를
+          // 비워 시트를 짧게 유지한다.
+          if ((widget.item.representativeImageKey ?? '').isNotEmpty) ...[
+            LabelPhotoLarge(
+              key: const Key('amend_photo'),
+              imageKey: widget.item.representativeImageKey,
+              height: 220,
+            ),
+            const SizedBox(height: 16),
+          ],
           Text(
             widget.item.modelName,
             style: Theme.of(context).textTheme.titleLarge,
