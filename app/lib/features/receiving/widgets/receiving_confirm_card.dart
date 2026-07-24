@@ -51,8 +51,19 @@ class ReceivingConfirmCard extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(producer, style: theme.textTheme.bodyMedium),
-                    Text(modelName, style: theme.textTheme.titleLarge),
+                    // 긴 이름이 좁은 폭에서 여러 줄로 늘어지지 않게 제한(candidate_list와 동일).
+                    Text(
+                      producer,
+                      style: theme.textTheme.bodyMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      modelName,
+                      style: theme.textTheme.titleLarge,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 4),
                     Wrap(
                       spacing: 6,
