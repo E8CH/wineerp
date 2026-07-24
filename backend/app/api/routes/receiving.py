@@ -7,11 +7,30 @@ from fastapi import APIRouter, HTTPException, Response, status
 from sqlalchemy.exc import IntegrityError
 
 from app.api.deps import CurrentManager, CurrentUser, SessionDep
+from app.crud import audit as audit_crud
 from app.crud import receiving as receiving_crud
-from app.models.wine import WineVintage
+from app.models.audit import AuditAction
+from app.models.wine import WineProduct, WineVintage
 from app.schemas.receiving import ReceivingCreate, ReceivingRead, ReceivingUpdate
 
 router = APIRouter(prefix="/receiving", tags=["receiving"])
+
+
+def _wine_context(
+    session: SessionDep, vintage_id, /
+) -> tuple[WineVintage | None, WineProduct | None]:
+    """감사 요약에 쓸 (빈티지, 제품). 삭제·미존재면 None을 채워 안전하게 라벨을 만든다."""
+    vintage = session.get(WineVintage, vintage_id)
+    product = (
+        session.get(WineProduct, vintage.wine_product_id) if vintage else None
+    )
+    return vintage, product
+
+
+def _label(vintage: WineVintage | None, product: WineProduct | None) -> str:
+    if product is None:
+        return "(삭제된 모델)"
+    return audit_crud.format_wine_label(product, vintage)
 
 
 @router.post("", response_model=ReceivingRead, status_code=status.HTTP_201_CREATED)
@@ -35,7 +54,8 @@ def create_receiving(
             response.status_code = status.HTTP_200_OK
             return ReceivingRead.model_validate(existing)
 
-    if session.get(WineVintage, payload.wine_vintage_id) is None:
+    vintage, product = _wine_context(session, payload.wine_vintage_id)
+    if vintage is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="해당 빈티지를 찾을 수 없습니다.",
@@ -62,6 +82,17 @@ def create_receiving(
         response.status_code = status.HTTP_200_OK
         return ReceivingRead.model_validate(existing)
 
+    # 새 입고만 로그에 남긴다 — 멱등 재생(위 200 반환)은 '생성'이 아니므로 제외한다.
+    label = _label(vintage, product)
+    audit_crud.record_event(
+        session,
+        action=AuditAction.receiving_create,
+        actor=current_user,
+        summary=f"{label} · {record.quantity}병 입고",
+        entity_type="receiving",
+        entity_id=record.id,
+        detail={"quantity": record.quantity, "memo": record.memo, "label": label},
+    )
     return ReceivingRead.model_validate(record)
 
 
@@ -80,6 +111,8 @@ def update_receiving(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="입고 기록을 찾을 수 없습니다.",
         )
+    # 변경 판정을 위해 수정 전 값을 먼저 스냅샷한다(update_record가 제자리 변경한다).
+    before_quantity, before_memo = record.quantity, record.memo
     updated = receiving_crud.update_record(
         session,
         record,
@@ -90,6 +123,30 @@ def update_receiving(
         # 필드가 요청에 실제로 담겼을 때만 메모를 건드린다 — 미지정과 삭제를 구분한다.
         memo_provided="memo" in payload.model_fields_set,
     )
+    # 실제로 바뀐 경우에만 로그를 남긴다 — update_record가 no-op일 때 이력 행을 안 만드는
+    # 것과 같은 기준. 무변경까지 로그하면 잡음이 진짜 수정을 묻는다.
+    changed = (
+        updated.quantity != before_quantity or updated.memo != before_memo
+    )
+    if changed:
+        vintage, product = _wine_context(session, updated.wine_vintage_id)
+        label = _label(vintage, product)
+        audit_crud.record_event(
+            session,
+            action=AuditAction.receiving_amend,
+            actor=current_user,
+            summary=f"{label} · 수량 {before_quantity}→{updated.quantity}병 수정",
+            entity_type="receiving",
+            entity_id=updated.id,
+            detail={
+                "before_quantity": before_quantity,
+                "after_quantity": updated.quantity,
+                "before_memo": before_memo,
+                "after_memo": updated.memo,
+                "reason": payload.reason,
+                "label": label,
+            },
+        )
     return ReceivingRead.model_validate(updated)
 
 
@@ -97,7 +154,7 @@ def update_receiving(
 def cancel_receiving(
     record_id: uuid.UUID,
     session: SessionDep,
-    _: CurrentManager,
+    current_user: CurrentManager,
 ) -> ReceivingRead:
     """입고 취소 — soft-delete만(AR6).
 
@@ -110,4 +167,17 @@ def cancel_receiving(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="입고 기록을 찾을 수 없습니다.",
         )
-    return ReceivingRead.model_validate(receiving_crud.soft_delete(session, record))
+    vintage, product = _wine_context(session, record.wine_vintage_id)
+    label = _label(vintage, product)
+    quantity = record.quantity
+    cancelled = receiving_crud.soft_delete(session, record)
+    audit_crud.record_event(
+        session,
+        action=AuditAction.receiving_cancel,
+        actor=current_user,
+        summary=f"{label} · {quantity}병 입고 취소",
+        entity_type="receiving",
+        entity_id=cancelled.id,
+        detail={"quantity": quantity, "label": label},
+    )
+    return ReceivingRead.model_validate(cancelled)

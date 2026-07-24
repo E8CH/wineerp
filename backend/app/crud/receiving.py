@@ -107,6 +107,11 @@ def list_records(
             .join(WineProduct, WineVintage.wine_product_id == WineProduct.id)
             .join(User, ReceivingRecord.staff_id == User.id)
             .where(ReceivingRecord.deleted_at.is_(None))  # soft-delete 제외(AR6)
+            # 삭제(아카이브)된 모델의 과거 입고는 내역에서 뺀다 — 재고·리포트와 같은
+            # 아카이브 필터를 공유해 "재고엔 없는데 내역엔 있는" 괴리를 없앤다.
+            # 원장(DB row)은 5년 보존을 위해 그대로 남고, 삭제 사실은 로그 탭에서 본다.
+            # SQLite도 IS NULL을 실행하므로 이 필터는 실행 테스트로 변이 검증된다.
+            .where(WineProduct.archived_at.is_(None))
             .where(ReceivingRecord.received_at >= start)
             .where(ReceivingRecord.received_at < end)
             .order_by(desc(ReceivingRecord.received_at), ReceivingRecord.id)

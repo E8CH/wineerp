@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../features/audit/audit_screen.dart';
 import '../features/auth/auth_controller.dart';
 import '../features/auth/login_screen.dart';
 import '../features/catalog/catalog_screen.dart';
@@ -17,7 +18,8 @@ class _AuthRefresh extends ChangeNotifier {
   }
 }
 
-/// 앱 라우터 — 미인증 시 /login 리다이렉트, 그 외 하단 4탭 셸(홈=스캔).
+/// 앱 라우터 — 미인증 시 /login 리다이렉트, 그 외 하단 6탭 셸(홈=스캔).
+/// 로그(활동 로그)는 관리자 전용이라 탭은 보이되 화면 안에서 차단한다(리포트와 동일).
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/scan',
@@ -49,6 +51,9 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           StatefulShellBranch(
             routes: [GoRoute(path: '/catalog', builder: (c, s) => const CatalogScreen())],
+          ),
+          StatefulShellBranch(
+            routes: [GoRoute(path: '/audit', builder: (c, s) => const AuditScreen())],
           ),
         ],
       ),
@@ -100,6 +105,11 @@ class _ScaffoldWithNav extends StatelessWidget {
             icon: Icon(Icons.style_outlined),
             selectedIcon: Icon(Icons.style),
             label: '모델',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history),
+            label: '로그',
           ),
         ],
       ),

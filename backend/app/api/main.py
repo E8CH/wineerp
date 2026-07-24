@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.routes import (
+    audit,
     auth,
     health,
     images,
@@ -27,3 +28,4 @@ api_router.include_router(inference.router)
 api_router.include_router(wines.router)
 api_router.include_router(reports.router)
 api_router.include_router(inventory.router)
+api_router.include_router(audit.router)

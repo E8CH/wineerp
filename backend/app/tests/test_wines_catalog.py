@@ -219,11 +219,14 @@ def test_archive_removes_from_catalog_inventory_reports(client, engine):
     assert _report_totals(engine)["total_quantity"] == 0
 
 
-def test_archive_preserves_receiving_ledger(client, engine):
-    """⚠️ 원장 보존 — 삭제해도 입고기록은 DB에 그대로 남고, 내역엔 model_archived=True로 뜬다.
+def test_archive_preserves_receiving_ledger_but_hides_from_history(client, engine):
+    """⚠️ 원장 보존 — 삭제해도 입고기록은 DB에 그대로 남는다(국세기본법 5년 보존).
+    동시에 삭제된 모델의 과거 입고는 **내역에서 빠진다**(재고·리포트와 같은 아카이브 필터).
 
     이것이 '삭제=아카이브'의 핵심 안전장치다. 소스 스캔 가드(session.delete)보다 강하다:
-    archive_product가 실수로 입고기록을 지우면 여기서 실행으로 잡힌다.
+    archive_product가 실수로 입고기록을 지우면 원장 단언(DB row)이 실행으로 잡는다.
+    내역 필터를 지우면 아래 `len(data) == 0` 단언이 깨진다(변이 검증).
+    삭제 사실은 이제 활동 로그 탭(GET /audit)에서 확인한다.
     """
     staff = _token(client)
     mgr = _manager_token(client, engine)
@@ -239,10 +242,9 @@ def test_archive_preserves_receiving_ledger(client, engine):
         assert recs[0].quantity == 8
         assert recs[0].deleted_at is None  # 취소도 아니다 — 원장은 온전하다
 
-    # 내역에는 남되 삭제된 모델로 표시된다.
+    # 하지만 내역에는 더 이상 뜨지 않는다 — "재고엔 없는데 내역엔 있는" 괴리를 없앤다.
     hist = client.get(f"{API}/receiving?period=month", headers=_h(staff)).json()
-    assert len(hist["data"]) == 1
-    assert hist["data"][0]["model_archived"] is True
+    assert len(hist["data"]) == 0
 
 
 def test_archive_frees_barcode_for_clean_reregistration(client, engine):

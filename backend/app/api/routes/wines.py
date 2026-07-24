@@ -14,8 +14,10 @@ import uuid
 from fastapi import APIRouter, HTTPException, status
 
 from app.api.deps import CurrentManager, CurrentUser, SessionDep
+from app.crud import audit as audit_crud
 from app.crud import receiving as receiving_crud
 from app.crud import wine as wine_crud
+from app.models.audit import AuditAction
 from app.models.receiving import ReceivingSource
 from app.models.wine import WineProduct, WineVintage
 from app.schemas.wine import (
@@ -97,7 +99,7 @@ def update_wine(
     product_id: uuid.UUID,
     payload: WineUpdate,
     session: SessionDep,
-    _: CurrentManager,
+    current_user: CurrentManager,
 ) -> ProductCatalogItem:
     """모델 메타 수정(manager). 입고내역·재고는 조인으로 읽어 자동 반영된다."""
     product = wine_crud.get_active_product(session, product_id)
@@ -105,6 +107,14 @@ def update_wine(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="모델을 찾을 수 없습니다."
         )
+    # update_product가 제자리 변경하므로 수정 전 값을 먼저 스냅샷한다(before/after 로그용).
+    before = {
+        "producer": product.producer,
+        "model_name": product.model_name,
+        "region": product.region,
+        "country": product.country,
+        "grape": product.grape,
+    }
     product = wine_crud.update_product(
         session,
         product,
@@ -114,6 +124,22 @@ def update_wine(
         country=payload.country,
         grape=payload.grape,
     )
+    after = {
+        "producer": product.producer,
+        "model_name": product.model_name,
+        "region": product.region,
+        "country": product.country,
+        "grape": product.grape,
+    }
+    audit_crud.record_event(
+        session,
+        action=AuditAction.wine_update,
+        actor=current_user,
+        summary=f"{product.producer} {product.model_name} 모델 정보 수정",
+        entity_type="wine",
+        entity_id=product.id,
+        detail={"before": before, "after": after},
+    )
     vintages = wine_crud.get_vintages_for_product(session, product.id)
     stock = receiving_crud.get_stock_map(session, [v.id for v in vintages])
     return _catalog_item(product, vintages, stock)
@@ -121,7 +147,7 @@ def update_wine(
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_wine(
-    product_id: uuid.UUID, session: SessionDep, _: CurrentManager
+    product_id: uuid.UUID, session: SessionDep, current_user: CurrentManager
 ) -> None:
     """모델 삭제 = 아카이브(manager). 입고기록 원장은 보존, 바코드 링크만 제거해 재등록 가능."""
     product = wine_crud.get_active_product(session, product_id)
@@ -129,7 +155,26 @@ def delete_wine(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="모델을 찾을 수 없습니다."
         )
+    # 요약을 아카이브 전에 만든다 — archive_product 후에도 값은 남지만, 삭제 시점의
+    # 표기를 스냅샷으로 못 박아 둔다(감사 로그는 "그때 무엇이었나"를 보존한다).
+    summary = f"{product.producer} {product.model_name} 모델 삭제"
+    detail = {
+        "producer": product.producer,
+        "model_name": product.model_name,
+        "region": product.region,
+        "country": product.country,
+        "grape": product.grape,
+    }
     wine_crud.archive_product(session, product)
+    audit_crud.record_event(
+        session,
+        action=AuditAction.wine_archive,
+        actor=current_user,
+        summary=summary,
+        entity_type="wine",
+        entity_id=product_id,
+        detail=detail,
+    )
 
 
 @router.post("", response_model=WineCreated, status_code=status.HTTP_201_CREATED)
@@ -158,6 +203,23 @@ def create_wine(
             session, barcode_id=barcode.id, wine_product_id=product.id
         )
 
+    audit_crud.record_event(
+        session,
+        action=AuditAction.wine_create,
+        actor=current_user,
+        summary=f"{product.producer} {product.model_name} 모델 등록",
+        entity_type="wine",
+        entity_id=product.id,
+        detail={
+            "producer": product.producer,
+            "model_name": product.model_name,
+            "vintage": vintage.vintage,
+            "region": product.region,
+            "country": product.country,
+            "grape": product.grape,
+        },
+    )
+
     record_id = None
     if payload.initial_quantity is not None:
         # 초기 세팅의 재고 기준선(FR13). `source`로 입고 이벤트와 구분되지만
@@ -170,6 +232,18 @@ def create_wine(
             source=ReceivingSource.initial_setup,
         )
         record_id = record.id
+        # 초기 재고 설정도 별도 이벤트로 남긴다 — "등록"과 "몇 병으로 시작했나"는
+        # 다른 사실이고, 초기 세팅분은 이후 입고와 구분해 추적돼야 한다(Story 3.3).
+        label = audit_crud.format_wine_label(product, vintage)
+        audit_crud.record_event(
+            session,
+            action=AuditAction.wine_initial_setup,
+            actor=current_user,
+            summary=f"{label} · 초기재고 {payload.initial_quantity}병 설정",
+            entity_type="receiving",
+            entity_id=record_id,
+            detail={"quantity": payload.initial_quantity, "label": label},
+        )
 
     return WineCreated(
         product_id=product.id,

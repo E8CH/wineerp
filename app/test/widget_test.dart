@@ -27,7 +27,7 @@ Widget _app() => ProviderScope(
     );
 
 void main() {
-  testWidgets('인증 시 앱 셸이 5탭으로 뜨고 홈은 스캔', (tester) async {
+  testWidgets('인증 시 앱 셸이 6탭으로 뜨고 홈은 스캔', (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
@@ -35,6 +35,8 @@ void main() {
     expect(find.text('리포트'), findsOneWidget);
     expect(find.text('재고'), findsOneWidget);
     expect(find.text('모델'), findsOneWidget);
+    // 로그 탭은 권한과 무관하게 보이고(차단은 화면 안에서), 리포트와 같은 규칙이다.
+    expect(find.text('로그'), findsOneWidget);
     expect(find.text('스캔'), findsWidgets);
   });
 
