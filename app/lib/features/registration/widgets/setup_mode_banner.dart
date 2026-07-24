@@ -27,12 +27,18 @@ class SetupModeBanner extends StatelessWidget {
             children: [
               const Icon(Icons.inventory_2, color: Colors.white, size: 20),
               const SizedBox(width: 8),
-              const Text(
-                '초기 세팅 모드',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
+              // 폴드 커버(≈280dp)·큰 글꼴에서 카운터·나가기와 한 줄에 다 못 들어가므로
+              // 라벨을 먼저 줄여(…) 오버플로우를 막는다. 카운터·나가기는 항상 보인다.
+              const Flexible(
+                child: Text(
+                  '초기 세팅 모드',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
                 ),
               ),
               const SizedBox(width: 10),

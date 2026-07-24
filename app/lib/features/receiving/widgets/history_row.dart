@@ -150,10 +150,18 @@ class HistoryRow extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Center(
-                  child: Text(
-                    '${item.quantity}',
-                    style: theme.textTheme.headlineMedium
-                        ?.copyWith(color: AppColors.onSurface),
+                  // 수량 폭을 묶어 좁은 폭에서도 왼쪽 이름(Expanded)을 잠식하지 않게 하고,
+                  // 자릿수가 많으면 줄바꿈 대신 줄어들게 한다.
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 64),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${item.quantity}',
+                        style: theme.textTheme.headlineMedium
+                            ?.copyWith(color: AppColors.onSurface),
+                      ),
+                    ),
                   ),
                 ),
               ),

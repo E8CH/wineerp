@@ -163,12 +163,17 @@ class _Kpi extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 14),
           child: Column(
             children: [
-              Text(
-                value,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineMedium
-                    ?.copyWith(color: AppColors.navy),
+              // 좁은 폭(폴드 커버·3열 KPI)에서 큰 숫자가 줄바꿈되지 않고 줄어들게 한다.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  value,
+                  maxLines: 1,
+                  style: Theme.of(context)
+                      .textTheme
+                      .headlineMedium
+                      ?.copyWith(color: AppColors.navy),
+                ),
               ),
               const SizedBox(height: 2),
               Text(label, style: const TextStyle(color: AppColors.muted)),

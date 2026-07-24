@@ -106,10 +106,17 @@ class _ScaffoldWithNav extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // 폴드 커버(≈280~344dp)·소형 기기에서 6개 탭 라벨이 잘리므로, 좁으면 선택된 탭만
+    // 라벨을 보인다. 일반 폰(≥360dp, 예: S24 ~411dp)은 테마 기본값(항상 표시)을 쓴다.
+    final narrow = MediaQuery.sizeOf(context).width < 360;
+
     return Scaffold(
       body: navigationShell,
       bottomNavigationBar: NavigationBar(
         selectedIndex: navigationShell.currentIndex,
+        labelBehavior: narrow
+            ? NavigationDestinationLabelBehavior.onlyShowSelected
+            : NavigationDestinationLabelBehavior.alwaysShow,
         onDestinationSelected: (index) => _onTap(ref, index),
         destinations: const [
           NavigationDestination(
